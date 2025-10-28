@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@layer utilities {
+ .angkot-bg {
+    @apply bg-[#72BD43] text-white;
+ }   
+ 
+}
