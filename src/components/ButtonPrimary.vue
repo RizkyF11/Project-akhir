@@ -17,7 +17,7 @@ const props = defineProps({
 const sizeClasses = computed(() => {
     switch (props.size) {
         case 'small' : default:
-            return 'py-2 px-8 text-sm' //tombol pendek
+            return 'py-2 px-8 text-lg ' //tombol pendek
 
         case 'medium' :return 'py-3 px-10 text-base' //tombol panjang
     }
@@ -25,7 +25,7 @@ const sizeClasses = computed(() => {
 </script>
 
 <template>
-   <button @click="onClick" :class="['angkot-bg font-semibold rounded-full transition-all duration-200 hover:bg-[#6BAD41]',
+   <button @click="onClick" :class="['angkot-bg font-semibold rounded-full transition-all duration-200 hover:bg-[#5e983a]',
     sizeClasses
    ]">
     <slot/>
