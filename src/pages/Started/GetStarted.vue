@@ -14,7 +14,7 @@ const goToMap = () => {
     class="h-screen flex flex-col justify-between items-center overflow-hidden"
   >
     <!-- judul dan deskripsi pendek -->
-    <div class="flex flex-col items-center text-center mt-45">
+    <div class="flex flex-col items-center text-center mt-40">
       <img
         src="/src/assets/hero.png"
         alt="ANGKOTCJR"
