@@ -13,7 +13,7 @@ const goToMap = () => {
   
   <div class="h-screen flex flex-col justify-between items-center overflow-hidden ">
     <!-- judul dan deskripsi pendek -->
-    <div class="flex flex-col items-center text-center mt-40">
+    <div class="flex flex-col items-center text-center mt-43">
     <img src="/src/assets/hero.png" alt="ANGKOTCJR" class="max-w-[230px] h-auto mx-auto">
       <h1 class="text-4xl font-bold">
         <span class="text-[#263582]">ANGKOT</span>
