@@ -16,8 +16,8 @@ const goToMap = () => {
     <!-- judul dan deskripsi pendek -->
     <div class="flex flex-col items-center text-center mt-40">
       <img
-        src="/src/assets/hero.png"
-        alt="ANGKOTCJR"
+        src="/src/assets/logo-angkot.png"
+        alt="ANGKOT CIANJUR"
         class="max-w-[230px] h-auto mx-auto"
       />
       <h1 class="text-4xl font-bold">

@@ -13,21 +13,16 @@ const toogleMenu = () => {
 };
 
 const handleClick = (path) => {
-  //aktifkan animasi penutupan
- isClosing.value = true;
-
- //setelah animasi selesai, tutup menu dan navigasi
+  isClosing.value = true;
   setTimeout(() => {
     isOpen.value = false;
     isClosing.value = false;
-    router.push(path) //navigasi setelah animasi selesai
-  }, 200); //waktu sesuai durasi
-}
+    router.push(path);
+  }, 200);
+};
 
-// fungsi bantu cek route aktif
 const isActive = (path) => route.path === path;
 </script>
-
 
 <template>
   <header
@@ -36,37 +31,38 @@ const isActive = (path) => route.path === path;
     <div class="flex items-center gap-2">
       <!-- logo kiri -->
       <img
-        src="/src/assets/hero.png"
-        alt="logo-angkotcjr"
-        class="max-w-[50px] h-auto mx-auto"
+        src="/src/assets/logo-angkot.png"
+        alt="logo-angkot"
+        class="max-w-[40px] h-auto mx-auto"
       />
       <!-- logo tengah -->
       <div class="absolute left-1/2 transform -translate-x-1/2">
         <img
-          src="/src/assets/angkotcjr.png"
-          alt="angkotcjr"
-          class="max-w-[140px] h-auto mx-auto"
+          src="/src/assets/Logotxt.png"
+          alt="Angkot Cianjur"
+          class="max-w-[150px] h-auto mx-auto"
         />
       </div>
     </div>
 
     <!-- tombol burger / close -->
-    <button
-      @click="toogleMenu"
-      class="text-3xl transition"
-    >
-      <Icon
-        v-if="!isOpen"
-        icon="material-symbols:menu-rounded"
-        width="28"
-        height="28"
-      />
-      <Icon
-        v-else
-        icon="material-symbols:close-small-rounded"
-        width="35"
-        height="35"
-      />
+    <button @click="toogleMenu" class="text-3xl transition">
+      <transition name="icon-fade" mode="out-in">
+        <Icon
+          v-if="!isOpen"
+          key="menu"
+          icon="material-symbols:menu"
+          width="29"
+          height="29"
+        />
+        <Icon
+          v-else
+          key="close"
+          icon="material-symbols:close"
+          width="29"
+          height="29"
+        />
+      </transition>
     </button>
 
     <!-- menu dropdown -->
@@ -80,48 +76,38 @@ const isActive = (path) => route.path === path;
     >
       <div
         v-if="isOpen && !isClosing"
-        class="absolute top-16 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-4xl w-70 py-1 flex flex-col items-center gap-3 mt-5 "
+        class="absolute top-16 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-4xl w-70 py-1 flex flex-col items-center gap-3 mt-5"
       >
         <!-- HOME -->
         <button
           @click="handleClick('/home')"
-          :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mt-1 font-poppins',
-            isActive('/home')
-              ? 'bg-[#72BD43] text-white shadow-md '
-              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
-          ]"
+          :class="[isActive('/home')
+            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins'
+            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins']"
         >
           HOME
-          
         </button>
 
-        <hr class="w-4/4 border-t border-gray-200">
+        <hr class="w-4/4 border-t border-gray-200" />
 
         <!-- RUTE -->
         <button
           @click="handleClick('/rute')"
-          :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 font-poppins',
-            isActive('/rute')
-              ? 'bg-[#72BD43] text-white shadow-md'
-              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
-          ]"
+          :class="[isActive('/rute')
+            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full font-poppins'
+            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full font-poppins']"
         >
           RUTE ANGKOT
         </button>
+
+        <hr class="w-4/4 border-t border-gray-200" />
+
         <!-- MAPS -->
-
-        <hr class="w-4/4 border-t border-gray-200">
-
-         <button
+        <button
           @click="handleClick('/jalurmaps')"
-          :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mb-1 font-poppins',
-            isActive('/jalurmaps')
-              ? 'bg-[#72BD43] text-white shadow-md'
-              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
-          ]"
+          :class="[isActive('/jalurmaps')
+            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins'
+            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins']"
         >
           MAPS
         </button>
@@ -129,3 +115,16 @@ const isActive = (path) => route.path === path;
     </transition>
   </header>
 </template>
+
+<style scoped>
+.icon-fade-enter-active,
+.icon-fade-leave-active {
+  transition: all 0.25s ease-in-out;
+}
+.icon-fade-enter-from,
+.icon-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+  filter: drop-shadow(0 0 4px #72BD43);
+}
+</style>
