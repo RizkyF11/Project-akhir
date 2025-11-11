@@ -2,13 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import GetStarted from '../pages/Started/GetStarted.vue'
 import Homepage from '../pages/Home/HomePage.vue'
 import RutePage from '../pages/Rute/RutePage.vue'
-import MapsPage from '../pages/Maps/MapsPage.vue'
+import JalurMapsPage from '../pages/Maps/JalurMapsPage.vue'
+import CariRutePage from '../pages/Carirute/CariRutePage.vue'
 
 
 const routes = [
   {
     path: '/',
-    redirect: '/home'
+    redirect: '/jalurmaps'
   },
   {
     path: '/started',
@@ -26,9 +27,14 @@ const routes = [
     component: RutePage
   },
   {
-    path: '/maps',
-    name: 'MapsPage',
-    component: MapsPage
+    path: '/jalurmaps',
+    name: 'JalurMapsPage',
+    component: JalurMapsPage
+  },
+  {
+    path: '/carirute',
+    name: 'CariRutePage',
+    component: CariRutePage
   }
 ]
 

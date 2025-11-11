@@ -28,6 +28,7 @@ const handleClick = (path) => {
 const isActive = (path) => route.path === path;
 </script>
 
+
 <template>
   <header
     class="relative z-50 bg-white shadow-md px-3 py-2 flex items-center justify-between"
@@ -85,7 +86,7 @@ const isActive = (path) => route.path === path;
         <button
           @click="handleClick('/home')"
           :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mt-1',
+            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mt-1 font-poppins',
             isActive('/home')
               ? 'bg-[#72BD43] text-white shadow-md '
               : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
@@ -101,7 +102,7 @@ const isActive = (path) => route.path === path;
         <button
           @click="handleClick('/rute')"
           :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200',
+            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 font-poppins',
             isActive('/rute')
               ? 'bg-[#72BD43] text-white shadow-md'
               : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
@@ -114,15 +115,15 @@ const isActive = (path) => route.path === path;
         <hr class="w-4/4 border-t border-gray-200">
 
          <button
-          @click="handleClick('/maps')"
+          @click="handleClick('/jalurmaps')"
           :class="[
-            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mb-1',
-            isActive('/maps')
+            'w-33 text-center font-semibold text-base rounded-full transition-all duration-200 mb-1 font-poppins',
+            isActive('/jalurmaps')
               ? 'bg-[#72BD43] text-white shadow-md'
               : 'text-gray-800 hover:bg-[#72BD43] hover:text-white',
           ]"
         >
-          MAPS JALUR
+          MAPS
         </button>
       </div>
     </transition>

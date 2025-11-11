@@ -5,7 +5,7 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 
 const goToMap = () => {
-  router.push("/maps");
+  router.push("/jalurmaps");
 };
 </script>
 
@@ -21,15 +21,15 @@ const goToMap = () => {
         class="max-w-[230px] h-auto mx-auto"
       />
       <h1 class="text-4xl font-bold">
-        <span class="text-[#263582]">ANGKOT</span>
-        <span class="text-[#7CC049]">CJR</span>
+        <span class="text-[#263582] font-poppins">ANGKOT</span>
+        <span class="text-[#7CC049] font-poppins">CJR</span>
       </h1>
-      <p class="text-[#7CC049] text-sm mt-1 font-semibold">
+      <p class="text-[#7CC049] text-sm mt-1 font-semibold font-poppins">
         Angkotnya Wargi Cianjur!
       </p>
       <!-- button bawah -->
       <div class="mb-100 mt-5">
-        <ButtonPrimary @click="goToMap">Get Started</ButtonPrimary>
+        <ButtonPrimary @click="goToMap" class="font-poppins">Get Started</ButtonPrimary>
       </div>
     </div>
 
