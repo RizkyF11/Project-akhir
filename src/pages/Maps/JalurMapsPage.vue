@@ -78,10 +78,10 @@
         <!-- map container -->
         <div class="w-full h-full absolute top-0 left-0" ref="mapContainer"></div>
 
-        <!-- button -->
+        <!-- button cari rute-->
         <button
           @click="goToCariRute"
-          class="absolute bottom-30 right-3 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-14 h-14 flex items-center justify-center transition-transform active:scale-95"
+          class="absolute bottom-27 right-5 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-13 h-13 flex items-center justify-center transition-transform active:scale-95"
         >
           <img src="/src/assets/buttonimg.png" alt="carirute" class="w-7 h-7" />
         </button>
