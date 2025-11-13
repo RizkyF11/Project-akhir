@@ -84,6 +84,8 @@ const angkotRoutes = ref([
   <!-- Daftar Rute Angkot -->
   <div class="space-y-3 pb-10">
     <Header />
+
+    <!-- Search -->
     <div
       class="relative left-1/2 transform -translate-x-1/2 w-[90%] bg-white rounded-lg flex items-center px-4 py-3 z-10 box-border"
       style="border: 2px solid rgba(0, 0, 0, 0.2)"

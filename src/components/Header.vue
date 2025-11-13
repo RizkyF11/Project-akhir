@@ -26,7 +26,7 @@ const isActive = (path) => route.path === path;
 
 <template>
   <header
-    class="relative z-50 bg-white shadow-md px-3 py-2 flex items-center justify-between"
+    class="sticky top-0 z-50 bg-white shadow-md px-3 py-2 flex items-center justify-between w-full max-w-[425px] mx-auto"
   >
     <div class="flex items-center gap-2">
       <!-- logo kiri -->
@@ -81,9 +81,11 @@ const isActive = (path) => route.path === path;
         <!-- HOME -->
         <button
           @click="handleClick('/home')"
-          :class="[isActive('/home')
-            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins'
-            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins']"
+          :class="[
+            isActive('/home')
+              ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins'
+              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins',
+          ]"
         >
           HOME
         </button>
@@ -93,9 +95,11 @@ const isActive = (path) => route.path === path;
         <!-- RUTE -->
         <button
           @click="handleClick('/rute')"
-          :class="[isActive('/rute')
-            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full font-poppins'
-            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full font-poppins']"
+          :class="[
+            isActive('/rute')
+              ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full font-poppins'
+              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full font-poppins',
+          ]"
         >
           RUTE ANGKOT
         </button>
@@ -105,9 +109,11 @@ const isActive = (path) => route.path === path;
         <!-- MAPS -->
         <button
           @click="handleClick('/jalurmaps')"
-          :class="[isActive('/jalurmaps')
-            ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins'
-            : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins']"
+          :class="[
+            isActive('/jalurmaps')
+              ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins'
+              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mb-1 font-poppins',
+          ]"
         >
           MAPS
         </button>
@@ -125,6 +131,6 @@ const isActive = (path) => route.path === path;
 .icon-fade-leave-to {
   opacity: 0;
   transform: scale(0.5);
-  filter: drop-shadow(0 0 4px #72BD43);
+  filter: drop-shadow(0 0 4px #72bd43);
 }
 </style>
