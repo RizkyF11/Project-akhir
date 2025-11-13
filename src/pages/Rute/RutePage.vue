@@ -16,8 +16,8 @@ const angkotRoutes = ref([
 </script>
 
 <template>
-  <div class="fixed top-0 left-0 w-full z-20 bg-white shadow">
-    <Header />
+    <div class="fixed top-0 left-0 w-full z-20 bg-white shadow">
+      <Header />
     <!-- Search bar -->
     <div
     class="absolute top-18 left-1/2 transform -translate-x-1/2 w-[90%] bg-white rounded-lg flex items-center px-4 py-3 z-10"
