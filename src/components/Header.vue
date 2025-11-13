@@ -33,7 +33,7 @@ const isActive = (path) => route.path === path;
       <img
         src="/src/assets/logo-angkot.png"
         alt="logo-angkot"
-        class="max-w-[40px] h-auto mx-auto"
+        class="max-w-10 h-auto mx-auto"
       />
       <!-- logo tengah -->
       <div class="absolute left-1/2 transform -translate-x-1/2">
