@@ -34,7 +34,7 @@ const onDrag = (e) => {
   const delta = startY.value - e.touches[0].clientY;
   const vh = window.innerHeight;
 
-  const percent = ((currentHeight.value * vh / 100 + delta) / vh) * 100;
+  const percent = (((currentHeight.value * vh) / 100 + delta) / vh) * 100;
   const clamped = Math.min(Math.max(percent, 20), 90);
   panelHeight.value = `${clamped}%`;
 };
@@ -47,14 +47,13 @@ const endDrag = () => {
   panelHeight.value = `${closest * 100}%`;
 };
 
-watch(activePanel, (val)  => {
+watch(activePanel, (val) => {
   if (val) {
     document.body.style.overflow = "hidden"; //disable scroll
   } else {
     document.body.style.overflow = "auto"; //enable scroll
   }
 });
-
 
 // ================================
 // POP UP IZIN LOKASI
@@ -69,14 +68,14 @@ onMounted(() => {
 // (format benar + diutamakan area cianjur)
 // ================================
 const reverseGeocode = async (lng, lat) => {
-   console.log("Reverse input:", lng, lat); // debug
+  console.log("Reverse input:", lng, lat); // debug
   const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${apiKey}`;
 
   try {
     const res = await fetch(url);
     if (!res.ok) {
       return "Lokasi tidak diketahui";
-    } 
+    }
 
     const data = await res.json();
     if (!data.features?.length) return "Lokasi tidak diketahui";
@@ -90,8 +89,6 @@ const reverseGeocode = async (lng, lat) => {
     return "Lokasi Tidak Diketahui";
   }
 };
-
-
 
 // ================================
 // GPS OTOMATIS (ISI INPUT OTOMATIS)
@@ -145,16 +142,17 @@ const fetchGeocode = async (query) => {
       const dx = lng - 107.139038;
       const dy = lat + 6.817977;
       return Math.sqrt(dx * dx + dy * dy);
-    }
+    };
 
     suggestions.value =
-      data.features?.map((item) => ({
-        name: item.place_name,
-        coords: item.geometry.coordinates,
-      })) 
-      .sort((a, b) => distanceToCianjur(a.coords) - distanceToCianjur(b.coords))
-      || [];
-      
+      data.features
+        ?.map((item) => ({
+          name: item.place_name,
+          coords: item.geometry.coordinates,
+        }))
+        .sort(
+          (a, b) => distanceToCianjur(a.coords) - distanceToCianjur(b.coords)
+        ) || [];
   } catch {
     suggestions.value = [];
   }
@@ -191,7 +189,7 @@ const pickSuggestion = (item) => {
         />
         <input
           v-model="startLocation"
-          @focus="() => activePanel = true"
+          @focus="() => (activePanel = true)"
           class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
           placeholder="Pilih Lokasi Awal"
         />
@@ -203,12 +201,11 @@ const pickSuggestion = (item) => {
     <!-- =============================================== -->
     <div
       v-if="activePanel"
-      class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[425px] h-full 
-         bg-black/40 flex justify-center items-end z-50"
+      class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[425px] h-full bg-black/40 flex justify-center items-end z-50"
       @click.self="activePanel = false"
     >
       <div
-        class="w-full max-w-[425px] bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.2)] rounded-t-2xl p-5 overflow-y-auto transition-all duration-200 fixed bottom-0 left-1/2 -translate-x-1/2"
+        class="w-full max-w-[425px] bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.2)] rounded-t-2xl p-5 transition-all duration-200 fixed bottom-0 left-1/2 -translate-x-1/2"
         :style="{ height: panelHeight }"
       >
         <!-- DRAG HANDLE -->
@@ -235,22 +232,23 @@ const pickSuggestion = (item) => {
         </div>
 
         <!-- RESULT LIST -->
-        <div v-if="suggestions.length">
-          <div
-            v-for="item in suggestions"
-            :key="item.name"
-            class="p-3 border-b text-[#cdc8c8] cursor-pointer"
-            @click="pickSuggestion(item)"
-          >
-            <div class="text-[#4c4a4a]">{{ item.name }}</div>
+        <div class="overflow-y-auto h-full no-scrollbar">
+          <div v-if="suggestions.length">
+            <div
+              v-for="item in suggestions"
+              :key="item.name"
+              class="p-3 border-b text-[#cdc8c8] cursor-pointer"
+              @click="pickSuggestion(item)"
+            >
+              <div class="text-[#4c4a4a]">{{ item.name }}</div>
+            </div>
           </div>
-        </div>
 
-        <div v-else class="text-[#959595] text-center mt-5">
-          Ketik untuk mencari lokasi...
+          <div v-else class="text-[#959595] text-center mt-5">
+            Ketik untuk mencari lokasi...
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
-
