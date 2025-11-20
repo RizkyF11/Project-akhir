@@ -126,19 +126,35 @@ const fetchGeocode = async (query) => {
     return;
   }
 
+  // prefill “cianjur” untuk memaksa hasil lebih relevan
+  let q = query.trim();
+  if (q.split(" ").length <= 2 && !q.toLowerCase().includes("cianjur")) {
+    q = `${q} cianjur`;
+  }
+
   const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
-    query
-  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}`;
+    q
+  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatc=true&autocomplete=true&types=poi,address,street,place`;
 
   try {
     const res = await fetch(url);
     const data = await res.json();
 
+    const distanceToCianjur = (coords) => {
+      const [lng, lat] = coords;
+      const dx = lng - 107.139038;
+      const dy = lat + 6.817977;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
     suggestions.value =
       data.features?.map((item) => ({
         name: item.place_name,
         coords: item.geometry.coordinates,
-      })) || [];
+      })) 
+      .sort((a, b) => distanceToCianjur(a.coords) - distanceToCianjur(b.coords))
+      || [];
+      
   } catch {
     suggestions.value = [];
   }
@@ -150,6 +166,10 @@ const fetchGeocode = async (query) => {
 const pickSuggestion = (item) => {
   startLocation.value = item.name;
   startCoords.value = item.coords;
+
+  console.log("📍 Lokasi hasil search dipilih:", item.name);
+  console.log("📌 Koordinat hasil search:", item.coords);
+
   activePanel.value = false;
 };
 </script>
