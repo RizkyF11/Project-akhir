@@ -2,11 +2,18 @@
 import { Icon } from "@iconify/vue";
 import Header from "../../components/Header.vue";
 import { ref, onMounted, watch } from "vue";
+import ButtonPrimary from "../../components/ButtonPrimary.vue";
+import { useRouter } from "vue-router";
 
 // ================================
 // STATE
 // ================================
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
+
+const router = useRouter();
+
+const startError = ref(""); //pesan error lokasi awal
+const endError = ref(""); //pesan error lokasi tujuan
 
 const startLocation = ref("");
 const startCoords = ref([null, null]); // [lng, lat]
@@ -171,22 +178,40 @@ const pickSuggestion = (item) => {
   if (panelMode.value === "start") {
     startLocation.value = item.name;
     startCoords.value = item.coords;
-  
-  console.log("====== Lokasi Awal Dipilih ======");
-  console.log("📍 Nama lokasi awal:", item.name);
-  console.log("📌 Koordinat awal:", item.coords);
+
+    console.log("====== Lokasi Awal Dipilih ======");
+    console.log("📍 Nama lokasi awal:", item.name);
+    console.log("📌 Koordinat awal:", item.coords);
   } else {
     endLocation.value = item.name;
     endCoords.value = item.coords;
 
-  console.log("====== Tujuan dipilih ======");
-  console.log("📍 Tujuan:", item.name);
-  console.log("📌 Koordinat Tujuan:", item.coords);
+    console.log("====== Tujuan dipilih ======");
+    console.log("📍 Tujuan:", item.name);
+    console.log("📌 Koordinat Tujuan:", item.coords);
   }
 
-  
-
   activePanel.value = false;
+};
+
+/// ================================
+// NAVIGASI KE HALAMAN PETA
+// ================================
+const goToMap = () => {
+  startError.value = "";
+  endError.value = "";
+
+  //cek validasi
+  if (!startLocation.value) {
+    startError.value = "field is required";
+  }
+  if (!endLocation.value) {
+    endError.value = "field is required";
+  }
+
+  if (startError.value || endError.value) return;
+
+  router.push("/jalurmaps");
 };
 </script>
 
@@ -194,11 +219,8 @@ const pickSuggestion = (item) => {
   <div class="flex flex-col h-screen">
     <Header />
 
-    <!-- INPUT LOKASI -->
-    <div class="mb-4 mt-10">
-      <div
-        class="absolute left-1/2 transform -translate-x-1/2 w-[90%] bg-white rounded-full shadow-md flex items-center px-4 py-3 z-10"
-      >
+    <div class="mb-3 mt-10 relative w-[90%] mx-auto">
+      <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
         <Icon
           icon="mdi:my-location"
           class="text-[#959595] mr-2"
@@ -208,18 +230,28 @@ const pickSuggestion = (item) => {
         <input
           v-model="startLocation"
           :disabled="activePanel"
-          @focus="() => { panelMode = 'start'; activePanel = true; }"
+          @focus="
+            () => {
+              panelMode = 'start';
+              activePanel = true;
+            }
+          "
           class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
           placeholder="Pilih Lokasi Awal"
         />
       </div>
+
+      <!-- Error muncul tanpa mendorong -->
+      <p
+        v-if="startError"
+        class="absolute text-red-500 text-sm left-3 -bottom-6"
+      >
+        {{ startError }}
+      </p>
     </div>
 
-
-    <!-- INPUT TUJUAN -->
-    <div
-        class="absolute left-1/2 mt-40 transform -translate-x-1/2 w-[90%] bg-white rounded-full shadow-md flex items-center px-4 py-3 z-10"
-      >
+    <div class="mb-10 mt-5 relative w-[90%] mx-auto">
+      <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
         <Icon
           icon="mdi:location"
           class="text-[#959595] mr-2"
@@ -229,11 +261,22 @@ const pickSuggestion = (item) => {
         <input
           v-model="endLocation"
           :disabled="activePanel"
-          @focus="() => { panelMode = 'end'; activePanel = true; }"
+          @focus="
+            () => {
+              panelMode = 'end';
+              activePanel = true;
+            }
+          "
           class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
           placeholder="Pilih Tujuan"
         />
       </div>
+
+      <!-- Error muncul tanpa mendorong -->
+      <p v-if="endError" class="absolute text-red-500 text-sm left-3 -bottom-6">
+        {{ endError }}
+      </p>
+    </div>
 
     <!-- =============================================== -->
     <!-- BOTTOM SHEET ala GOJEK -->
@@ -261,11 +304,18 @@ const pickSuggestion = (item) => {
             icon="mdi:arrow-left"
             width="24"
             class="text-[#959595] mr-3"
-            @click= "() => { activePanel = false; suggestions = [];}"
+            @click="
+              () => {
+                activePanel = false;
+                suggestions = [];
+              }
+            "
           />
           <input
             class="flex-1 bg-white shadow-md rounded-full px-4 py-3 text-[#959595] focus:outline-none font-poppins"
-            :placeholder="panelMode === 'start' ? 'Cari Lokasi awal...' : 'Cari Tujuan...'"
+            :placeholder="
+              panelMode === 'start' ? 'Cari Lokasi awal...' : 'Cari Tujuan...'
+            "
             @input="fetchGeocode($event.target.value)"
           />
         </div>
@@ -288,6 +338,19 @@ const pickSuggestion = (item) => {
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="!activePanel"
+      class="fixed bottom-15 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-50 flex justify-center"
+    >
+      <ButtonPrimary
+        @click="goToMap"
+        size="medium"
+        class="font-poppins w-[83%]"
+      >
+        Cari Rute Angkot
+      </ButtonPrimary>
     </div>
   </div>
 </template>
