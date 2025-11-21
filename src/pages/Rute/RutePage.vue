@@ -82,7 +82,7 @@ const angkotRoutes = ref([
 
 <template>
   <!-- Daftar Rute Angkot -->
-  <div class="flex flex-col h-screen">
+  <div class="flex flex-col h-screen overflow-hidden">
     <Header />
 
     <!-- Search -->

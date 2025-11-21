@@ -10,6 +10,12 @@ const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
 
 const startLocation = ref("");
 const startCoords = ref([null, null]); // [lng, lat]
+
+const endLocation = ref("");
+const endCoords = ref([null, null]); // [lng, lat]
+
+const panelMode = ref("start"); // "start" atau "end"
+
 const activePanel = ref(false);
 const suggestions = ref([]);
 
@@ -162,11 +168,23 @@ const fetchGeocode = async (query) => {
 // PILIH LOKASI DARI SUGGESTION
 // ================================
 const pickSuggestion = (item) => {
-  startLocation.value = item.name;
-  startCoords.value = item.coords;
+  if (panelMode.value === "start") {
+    startLocation.value = item.name;
+    startCoords.value = item.coords;
+  
+  console.log("====== Lokasi Awal Dipilih ======");
+  console.log("📍 Nama lokasi awal:", item.name);
+  console.log("📌 Koordinat awal:", item.coords);
+  } else {
+    endLocation.value = item.name;
+    endCoords.value = item.coords;
 
-  console.log("📍 Lokasi hasil search dipilih:", item.name);
-  console.log("📌 Koordinat hasil search:", item.coords);
+  console.log("====== Tujuan dipilih ======");
+  console.log("📍 Tujuan:", item.name);
+  console.log("📌 Koordinat Tujuan:", item.coords);
+  }
+
+  
 
   activePanel.value = false;
 };
@@ -189,12 +207,33 @@ const pickSuggestion = (item) => {
         />
         <input
           v-model="startLocation"
-          @focus="() => (activePanel = true)"
+          :disabled="activePanel"
+          @focus="() => { panelMode = 'start'; activePanel = true; }"
           class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
           placeholder="Pilih Lokasi Awal"
         />
       </div>
     </div>
+
+
+    <!-- INPUT TUJUAN -->
+    <div
+        class="absolute left-1/2 mt-40 transform -translate-x-1/2 w-[90%] bg-white rounded-full shadow-md flex items-center px-4 py-3 z-10"
+      >
+        <Icon
+          icon="mdi:location"
+          class="text-[#959595] mr-2"
+          width="24"
+          height="24"
+        />
+        <input
+          v-model="endLocation"
+          :disabled="activePanel"
+          @focus="() => { panelMode = 'end'; activePanel = true; }"
+          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          placeholder="Pilih Tujuan"
+        />
+      </div>
 
     <!-- =============================================== -->
     <!-- BOTTOM SHEET ala GOJEK -->
@@ -222,11 +261,11 @@ const pickSuggestion = (item) => {
             icon="mdi:arrow-left"
             width="24"
             class="text-[#959595] mr-3"
-            @click="activePanel = false"
+            @click= "() => { activePanel = false; suggestions = [];}"
           />
           <input
             class="flex-1 bg-white shadow-md rounded-full px-4 py-3 text-[#959595] focus:outline-none font-poppins"
-            placeholder="Cari Lokasi..."
+            :placeholder="panelMode === 'start' ? 'Cari Lokasi awal...' : 'Cari Tujuan...'"
             @input="fetchGeocode($event.target.value)"
           />
         </div>
