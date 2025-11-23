@@ -4,6 +4,8 @@ import Header from "../../components/Header.vue";
 import { ref, onMounted, watch } from "vue";
 import ButtonPrimary from "../../components/ButtonPrimary.vue";
 import { useRouter } from "vue-router";
+import { getRekomendasiAngkot } from "../../services/angkotService";
+
 
 // ================================
 // STATE
@@ -197,7 +199,7 @@ const pickSuggestion = (item) => {
 /// ================================
 // NAVIGASI KE HALAMAN PETA
 // ================================
-const goToMap = () => {
+const goToMap = async () => {
   startError.value = "";
   endError.value = "";
 
@@ -211,7 +213,36 @@ const goToMap = () => {
 
   if (startError.value || endError.value) return;
 
-  router.push("/jalurmaps");
+  if(!startCoords.value[0] || !endCoords.value[0]) {
+    alert("Lokasi belum dipilih dengan benar");
+    return;
+  }
+
+  const [startLng, startLat] = startCoords.value;
+  const [endLng, endLat] = endCoords.value;
+
+  try {
+    const response = await getRekomendasiAngkot(
+      startLat,
+      startLng,
+      endLat,
+      endLng
+    );
+
+    console.log("Hasil API:", response.data);
+
+    router.push({
+      path: "/jalurmaps",
+      query: {
+        data: encodeURIComponent(JSON.stringify(response.data)),
+        start: encodeURIComponent(JSON.stringify(startCoords.value)),
+        end: encodeURIComponent(JSON.stringify(endCoords.value)),
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    alert("Gagal memuat rekomendasi angkot");
+  }
 };
 </script>
 
