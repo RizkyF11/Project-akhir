@@ -6,7 +6,6 @@ import ButtonPrimary from "../../components/ButtonPrimary.vue";
 import { useRouter } from "vue-router";
 import { getRekomendasiAngkot } from "../../services/angkotService";
 
-
 // ================================
 // STATE
 // ================================
@@ -213,7 +212,7 @@ const goToMap = async () => {
 
   if (startError.value || endError.value) return;
 
-  if(!startCoords.value[0] || !endCoords.value[0]) {
+  if (!startCoords.value[0] || !endCoords.value[0]) {
     alert("Lokasi belum dipilih dengan benar");
     return;
   }
@@ -235,8 +234,10 @@ const goToMap = async () => {
       path: "/jalurmaps",
       query: {
         data: encodeURIComponent(JSON.stringify(response.data)),
-        start: encodeURIComponent(JSON.stringify(startCoords.value)),
-        end: encodeURIComponent(JSON.stringify(endCoords.value)),
+        start_lat: startCoords.value.lat,
+        start_lng: startCoords.value.lng,
+        end_lat: endCoords.value.lat,
+        end_lng: endCoords.value.lng,
       },
     });
   } catch (err) {

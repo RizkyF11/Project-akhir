@@ -91,6 +91,19 @@ const addMarker = (lng, lat, color = "red") => {
   new maptilersdk.Marker({ color }).setLngLat([lng, lat]).addTo(map.value);
 };
 
+const addDropMarker = (lng, lat) => {
+  const el = document.createElement("div");
+  el.className = "drop-marker";
+  el.style.width = "30px";
+  el.style.height = "30px";
+  el.style.backgroundImage = "url('/src/assets/pin_drop.png')";
+  el.style.backgroundSize = "cover";
+
+  new maptilersdk.Marker({ element: el })
+    .setLngLat([lng, lat])
+    .addTo(map.value);
+};
+
 // Render SINGLE route
 const renderSingleRoute = (data) => {
   const coords = data.routes[0].coordinates.map((c) => [c.lng, c.lat]);
@@ -103,6 +116,7 @@ const renderSingleRoute = (data) => {
 
   addMarker(coords[0][0], coords[0][1], "green");
   addMarker(coords[coords.length - 1][0], coords[coords.length - 1][1], "blue");
+  addDropMarker(lng, lat);
 };
 
 // Render DOUBLE route
@@ -153,29 +167,40 @@ const renderTripleRoute = (data) => {
 
 // Panggil API rekomendasi angkot
 const loadRecommendedRoutes = async () => {
-  // 1️⃣ — cek apakah ada data route dari URL
+  /* ============================
+       0️⃣ — AMBIL DARI LOCALSTORAGE
+     ============================ */
+  const lsData = localStorage.getItem("routeData");
+
+  if (lsData) {
+    const data = JSON.parse(lsData);
+    console.log("Loaded from LocalStorage:", data);
+
+    if (data.type === "single") return renderSingleRoute(data);
+    if (data.type === "double") return renderDoubleRoute(data);
+    if (data.type === "triple") return renderTripleRoute(data);
+
+    return; // stop setelah render
+  }
+
+  /* ============================
+       1️⃣ — (opsional) fallback dari URL (boleh hapus)
+     ============================ */
   const rawData = route.query.data;
 
   if (rawData) {
     let decoded = decodeURIComponent(rawData);
     decoded = decodeURIComponent(decoded);
-
     const result = JSON.parse(decoded);
 
-    console.log("Parsed Route Data dari URL:", result);
-
-    if (result.type === "single") {
-      return renderSingleRoute(result);
-    }
-    if (result.type === "double") {
-      return renderDoubleRoute(result);
-    }
-    if (result.type === "triple") {
-      return renderTripleRoute(result);
-    }
+    if (result.type === "single") return renderSingleRoute(result);
+    if (result.type === "double") return renderDoubleRoute(result);
+    if (result.type === "triple") return renderTripleRoute(result);
   }
 
-  // 2️⃣ — fallback ke API jika tidak ada route di URL
+  /* ============================
+       2️⃣ — fallback panggil API
+     ============================ */
   const start_lat = route.query.start_lat;
   const start_lng = route.query.start_lng;
   const end_lat = route.query.end_lat;
@@ -189,19 +214,11 @@ const loadRecommendedRoutes = async () => {
     const res = await fetch(url);
     const result = await res.json();
 
-    console.log("API Result:", result);
-
-    if (result.status !== "success") return;
-
-    if (result.type === "single") {
-      renderSingleRoute(result);
-    } else if (result.type === "double") {
-      renderDoubleRoute(result);
-    } else if (result.type === "triple") {
-      renderTripleRoute(result);
-    }
+    if (result.type === "single") renderSingleRoute(result);
+    else if (result.type === "double") renderDoubleRoute(result);
+    else if (result.type === "triple") renderTripleRoute(result);
   } catch (e) {
-    console.error("API ERROR:", e);
+    console.error(e);
   }
 };
 
