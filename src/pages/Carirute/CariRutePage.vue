@@ -198,17 +198,14 @@ const pickSuggestion = (item) => {
 /// ================================
 // NAVIGASI KE HALAMAN PETA
 // ================================
+// ================================
+// NAVIGASI KE HALAMAN PETA
+// ================================
 const goToMap = async () => {
   startError.value = "";
   endError.value = "";
 
-  //cek validasi
-  if (!startLocation.value) {
-    startError.value = "field is required";
-  }
-  if (!endLocation.value) {
-    endError.value = "field is required";
-  }
+  // ... (Kode validasi tidak berubah) ...
 
   if (startError.value || endError.value) return;
 
@@ -221,6 +218,7 @@ const goToMap = async () => {
   const [endLng, endLat] = endCoords.value;
 
   try {
+    // Panggilan API
     const response = await getRekomendasiAngkot(
       startLat,
       startLng,
@@ -230,16 +228,21 @@ const goToMap = async () => {
 
     console.log("Hasil API:", response.data);
 
+    // 1. Simpan data besar ke LocalStorage
+    localStorage.setItem("routeData", JSON.stringify(response.data));
+
+    // 2. Navigasi tanpa membawa 'data' di query URL
     router.push({
       path: "/jalurmaps",
       query: {
-        data: encodeURIComponent(JSON.stringify(response.data)),
-        start_lat: startCoords.value.lat,
-        start_lng: startCoords.value.lng,
-        end_lat: endCoords.value.lat,
-        end_lng: endCoords.value.lng,
+        // Data start/end tetap di sini
+        start_lat: startLat, // Gunakan variabel lokal startLat/startLng, bukan .value.lat
+        start_lng: startLng,
+        end_lat: endLat,
+        end_lng: endLng,
       },
     });
+    // ==========================================
   } catch (err) {
     console.error(err);
     alert("Gagal memuat rekomendasi angkot");

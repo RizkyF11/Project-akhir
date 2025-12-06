@@ -13,6 +13,7 @@ const route = useRoute();
 const mapContainer = ref(null);
 const map = ref(null);
 const searchQuery = ref("");
+const markers = ref([]); //melacak marker
 
 // default lokasi cianjur
 const cianjurCoords = [107.1422, -6.812];
@@ -56,22 +57,40 @@ const searchLocation = async () => {
   }
 };
 
+const clearMap = () => {
+  const routeLayers = ["single-route", "route-1", "route-2", "r1", "r2", "r3"];
+  routeLayers.forEach((id) => {
+    if (map.value.getLayer(id)) map.value.removeLayer(id);
+    if (map.value.getSource(id)) map.value.removeSource(id);
+  });
+
+  markers.value.forEach((marker) => marker.remove());
+  markers.value = [];
+};
+
 /* =====================================================
       FUNGSI TAMBAHAN UNTUK MENAMPILKAN JALUR ANGKOT
 ===================================================== */
 
 // Menambah polyline (single)
 const drawPolyline = (coords, color = "#2ecc71", id = "route-line") => {
-  if (!map.value.getSource(id)) {
+  const geojson = {
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: coords,
+    },
+  };
+
+  if (map.value.getSource(id)) {
+    map.value.getSource(id).setData(geojson);
+    if (mapContainer.value.getLayer(id)) {
+      map.value.setPaintProperty(id, "line-color", color);
+    }
+  } else {
     map.value.addSource(id, {
       type: "geojson",
-      data: {
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: coords,
-        },
-      },
+      data: geojson,
     });
 
     map.value.addLayer({
@@ -88,7 +107,11 @@ const drawPolyline = (coords, color = "#2ecc71", id = "route-line") => {
 
 // menambah marker lokasi
 const addMarker = (lng, lat, color = "red") => {
-  new maptilersdk.Marker({ color }).setLngLat([lng, lat]).addTo(map.value);
+  const newMarker = new maptilersdk.Marker({ color })
+    .setLngLat([lng, lat])
+    .addTo(map.value);
+  markers.value.push(newMarker);
+  return newMarker;
 };
 
 const addDropMarker = (lng, lat) => {
@@ -96,16 +119,19 @@ const addDropMarker = (lng, lat) => {
   el.className = "drop-marker";
   el.style.width = "30px";
   el.style.height = "30px";
-  el.style.backgroundImage = "url('/src/assets/pin_drop.png')";
+  el.style.backgroundImage = "url('/src/assets/gps.png')";
   el.style.backgroundSize = "cover";
 
-  new maptilersdk.Marker({ element: el })
+  const newMarker = new maptilersdk.Marker({ element: el })
     .setLngLat([lng, lat])
     .addTo(map.value);
+  markers.value.push(newMarker);
+  return newMarker;
 };
 
 // Render SINGLE route
 const renderSingleRoute = (data) => {
+  // Map data to [lng, lat] format
   const coords = data.routes[0].coordinates.map((c) => [c.lng, c.lat]);
 
   drawPolyline(
@@ -113,10 +139,6 @@ const renderSingleRoute = (data) => {
     data.routes[0].angkot.warna ?? "#2ecc71",
     "single-route"
   );
-
-  addMarker(coords[0][0], coords[0][1], "green");
-  addMarker(coords[coords.length - 1][0], coords[coords.length - 1][1], "blue");
-  addDropMarker(lng, lat);
 };
 
 // Render DOUBLE route
@@ -131,23 +153,10 @@ const renderDoubleRoute = (data) => {
   drawPolyline(coords1, r1.angkot.warna ?? "#3498db", "route-1");
   drawPolyline(coords2, r2.angkot.warna ?? "#9b59b6", "route-2");
 
-  // titik awal & akhir
-  addMarker(coords1[0][0], coords1[0][1], "green");
-  addMarker(
-    coords2[coords2.length - 1][0],
-    coords2[coords2.length - 1][1],
-    "blue"
-  );
-
-  // titik transfer A → B
-  if (r1.transfer_point_on_a) {
-    const [lng, lat] = r1.transfer_point_on_a.coordinates;
-    addMarker(lng, lat, "yellow");
-  }
-
+  // Tambahkan MARKER KUNING untuk TITIK TRANSFER (Pickup Angkot 2)
   if (r2.transfer_point_on_b) {
     const [lng, lat] = r2.transfer_point_on_b.coordinates;
-    addMarker(lng, lat, "yellow");
+    addMarker(lng, lat, "orange");
   }
 };
 
@@ -167,61 +176,88 @@ const renderTripleRoute = (data) => {
 
 // Panggil API rekomendasi angkot
 const loadRecommendedRoutes = async () => {
+  // 🧹 1. BERSIHKAN PETA DAHULU
+  clearMap();
+
+  let dataToRender = null;
+
   /* ============================
-       0️⃣ — AMBIL DARI LOCALSTORAGE
-     ============================ */
+      0️⃣ — AMBIL DARI LOCALSTORAGE
+      ============================ */
   const lsData = localStorage.getItem("routeData");
 
   if (lsData) {
-    const data = JSON.parse(lsData);
-    console.log("Loaded from LocalStorage:", data);
-
-    if (data.type === "single") return renderSingleRoute(data);
-    if (data.type === "double") return renderDoubleRoute(data);
-    if (data.type === "triple") return renderTripleRoute(data);
-
-    return; // stop setelah render
+    dataToRender = JSON.parse(lsData);
+    console.log("Loaded from LocalStorage:", dataToRender);
   }
 
   /* ============================
-       1️⃣ — (opsional) fallback dari URL (boleh hapus)
-     ============================ */
+      1️⃣ — (opsional) fallback dari URL (dipertahankan)
+      ============================ */
   const rawData = route.query.data;
 
-  if (rawData) {
-    let decoded = decodeURIComponent(rawData);
-    decoded = decodeURIComponent(decoded);
-    const result = JSON.parse(decoded);
-
-    if (result.type === "single") return renderSingleRoute(result);
-    if (result.type === "double") return renderDoubleRoute(result);
-    if (result.type === "triple") return renderTripleRoute(result);
+  if (!dataToRender && rawData) {
+    try {
+      let decoded = decodeURIComponent(rawData);
+      decoded = decodeURIComponent(decoded);
+      dataToRender = JSON.parse(decoded);
+    } catch (e) {
+      console.error("Error decoding URL data:", e);
+    }
   }
 
   /* ============================
-       2️⃣ — fallback panggil API
-     ============================ */
+      2️⃣ — fallback panggil API
+      ============================ */
   const start_lat = route.query.start_lat;
   const start_lng = route.query.start_lng;
   const end_lat = route.query.end_lat;
   const end_lng = route.query.end_lng;
 
-  if (!start_lat || !end_lat) return;
+  if (!dataToRender && start_lat && end_lat) {
+    const url = `${apiBaseUrl}/rekomendasi-angkot?start_lat=${start_lat}&start_lng=${start_lng}&end_lat=${end_lat}&end_lng=${end_lng}`;
 
-  const url = `${apiBaseUrl}/rekomendasi-angkot?start_lat=${start_lat}&start_lng=${start_lng}&end_lat=${end_lat}&end_lng=${end_lng}`;
+    try {
+      const res = await fetch(url, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+      });
+      dataToRender = await res.json();
+    } catch (e) {
+      console.error("API Fallback Error:", e);
+    }
+  }
 
-  try {
-    const res = await fetch(url);
-    const result = await res.json();
+  // ----------------------------------------------------
+  // 🚀 LOGIKA RENDERING UTAMA (DIJALANKAN DI AKHIR)
+  // ----------------------------------------------------
+  if (dataToRender) {
+    if (dataToRender.type === "single") renderSingleRoute(dataToRender);
+    else if (dataToRender.type === "double") renderDoubleRoute(dataToRender);
+    // Catatan: Pastikan renderTripleRoute sudah disesuaikan dengan format data yang benar
+    else if (dataToRender.type === "triple") renderTripleRoute(dataToRender);
+  }
 
-    if (result.type === "single") renderSingleRoute(result);
-    else if (result.type === "double") renderDoubleRoute(result);
-    else if (result.type === "triple") renderTripleRoute(result);
-  } catch (e) {
-    console.error(e);
+  // 🚩 TAMBAHKAN MARKER PENGGUNA (START & END)
+  if (start_lat && start_lng) {
+    addMarker(parseFloat(start_lng), parseFloat(start_lat), "green");
+  }
+
+  if (end_lat && end_lng) {
+    addDropMarker(parseFloat(end_lng), parseFloat(end_lat));
+  }
+
+  // Perluasan batasan peta untuk mencakup Start dan End
+  if (start_lat && end_lat) {
+    const bounds = new maptilersdk.LngLatBounds();
+    bounds.extend([parseFloat(start_lng), parseFloat(start_lat)]);
+    bounds.extend([parseFloat(end_lng), parseFloat(end_lat)]);
+
+    map.value.fitBounds(bounds, {
+      padding: 50,
+      duration: 1500,
+    });
   }
 };
-
 /* =========== INISIALISASI MAP ============== */
 onMounted(() => {
   maptilersdk.config.apiKey = apiKey;
@@ -247,10 +283,8 @@ onMounted(() => {
     <Header />
 
     <div class="relative w-full flex-1" style="height: calc(100vh - 64px)">
-      <!-- map container -->
       <div class="w-full h-full absolute top-0 left-0" ref="mapContainer"></div>
 
-      <!-- button cari rute-->
       <button
         @click="goToCariRute"
         class="absolute bottom-27 right-5 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-13 h-13 flex items-center justify-center transition-transform active:scale-95"
@@ -258,7 +292,6 @@ onMounted(() => {
         <img src="/src/assets/buttonimg.png" alt="carirute" class="w-7 h-7" />
       </button>
 
-      <!-- search -->
       <div
         class="absolute bottom-10 left-1/2 transform -translate-x-1/2 w-[90%] bg-white rounded-full shadow-md flex items-center px-4 py-3 z-10"
       >
