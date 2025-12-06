@@ -4,15 +4,17 @@ import { ref, onMounted } from "vue";
 import * as maptilersdk from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { useRouter, useRoute } from "vue-router";
+import RouteDetailPanel from "../../components/RouteDetailPanel.vue";
 
 // router
 const router = useRouter();
 const route = useRoute();
 
+const isPanelVisible = ref(true); // Default open for UI focus
+
 // map state
 const mapContainer = ref(null);
 const map = ref(null);
-const searchQuery = ref("");
 const markers = ref([]); //melacak marker
 
 // default lokasi cianjur
@@ -25,36 +27,6 @@ const apiBaseUrl = import.meta.env.VITE_API_URL; // contoh: http://127.0.0.1:800
 // Navigasi ke cari rute
 const goToCariRute = () => {
   router.push("/carirute");
-};
-
-// Fungsi pencarian lokasi
-const searchLocation = async () => {
-  if (!searchQuery.value) return;
-
-  const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
-    searchQuery.value
-  )}.json?key=${apiKey}&country=id&proximity=${cianjurCoords[0]},${
-    cianjurCoords[1]
-  }`;
-
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.features?.length > 0) {
-      const [lng, lat] = data.features[0].geometry.coordinates;
-      map.value.flyTo({
-        center: [lng, lat],
-        zoom: 15,
-        essential: true,
-      });
-    } else {
-      alert("Lokasi tidak ditemukan");
-    }
-  } catch (err) {
-    console.error(err);
-    alert("Terjadi kesalahan saat mencari lokasi");
-  }
 };
 
 const clearMap = () => {
@@ -287,29 +259,16 @@ onMounted(() => {
 
       <button
         @click="goToCariRute"
-        class="absolute bottom-27 right-5 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-13 h-13 flex items-center justify-center transition-transform active:scale-95"
+        class="absolute bottom-27 right-5 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-13 h-13 flex items-center justify-center transition-transform active:scale-95 z-40"
       >
         <img src="/src/assets/buttonimg.png" alt="carirute" class="w-7 h-7" />
       </button>
 
-      <div
-        class="absolute bottom-10 left-1/2 transform -translate-x-1/2 w-[90%] bg-white rounded-full shadow-md flex items-center px-4 py-3 z-10"
-      >
-        <Icon
-          icon="material-symbols:search"
-          width="24"
-          height="24"
-          class="text-[#959595] mr-2"
-        />
-
-        <input
-          v-model="searchQuery"
-          @keyup.enter="searchLocation"
-          type="text"
-          placeholder="Cari Lokasi"
-          class="font-poppins flex-1 bg-transparent focus:outline-none text-[#959595]"
-        />
-      </div>
+      <!-- Bottom Panel Component -->
+      <RouteDetailPanel
+        :is-visible="isPanelVisible"
+        @close="isPanelVisible = false"
+      />
     </div>
   </div>
 </template>
