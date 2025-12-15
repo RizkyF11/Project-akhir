@@ -11,6 +11,9 @@ import { getRekomendasiAngkot } from "../../services/angkotService";
 // ================================
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
 
+const CACHE_KEY = "routeData";
+const CACHE_DURATION_MS = 5 * 60 * 60 * 1000;
+
 const router = useRouter();
 
 const startError = ref(""); //pesan error lokasi awal
@@ -39,6 +42,27 @@ const startY = ref(0);
 const currentHeight = ref(0);
 const snapPoints = [0.25, 0.5, 0.75]; // 25%, 50%, 75%
 
+const cleanupRouteData = () => {
+  const cachedItem = localStorage.getItem(CACHE_KEY);
+  if (!cachedItem) return;
+
+  try {
+    const cacheData = JSON.parse(cachedItem);
+    const timeElapsed = Date.now() - cacheData.timestamp;
+
+    // Jika data sudah kadaluarsa, hapus dari localStorage
+    if (timeElapsed > CACHE_DURATION_MS) {
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem("startLocationName");
+      localStorage.removeItem("endLocationName");
+      console.log("Data rekomendasi rute lama telah dihapus (Expired).");
+    }
+  } catch (e) {
+    // Hapus jika data rusak
+    localStorage.removeItem(CACHE_KEY);
+    console.error("Error saat membersihkan cache rute:", e);
+  }
+};
 const startDrag = (e) => {
   startY.value = e.touches[0].clientY;
   currentHeight.value = parseInt(panelHeight.value);
@@ -229,7 +253,16 @@ const goToMap = async () => {
     console.log("Hasil API:", response.data);
 
     // 1. Simpan data besar ke LocalStorage
-    localStorage.setItem("routeData", JSON.stringify(response.data));
+    const dataToStore = {
+      timestamp: Date.now(),
+      data: response.data,
+    };
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify(dataToStore));
+
+    // Simpan nama lokasi (tidak perlu timeout karena data rute yang utama)
+    localStorage.setItem("startLocationName", startLocation.value);
+    localStorage.setItem("endLocationName", endLocation.value);
 
     // 2. Navigasi tanpa membawa 'data' di query URL
     router.push({

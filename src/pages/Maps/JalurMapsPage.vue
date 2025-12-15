@@ -10,7 +10,12 @@ import RouteDetailPanel from "../../components/RouteDetailPanel.vue";
 const router = useRouter();
 const route = useRoute();
 
-const isPanelVisible = ref(true); // Default open for UI focus
+// KONFIGURASI TIMEOUT
+const CACHE_KEY = "routeData";
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Menit
+
+const isPanelVisible = ref(false); // Default open for UI focus
+const routeResult = ref(null);
 
 // map state
 const mapContainer = ref(null);
@@ -22,7 +27,7 @@ const cianjurCoords = [107.1422, -6.812];
 
 // API Keys
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
-const apiBaseUrl = import.meta.env.VITE_API_URL; // contoh: http://127.0.0.1:8000/api
+const apiBaseUrl = import.meta.env.VITE_API_URL;
 
 // Navigasi ke cari rute
 const goToCariRute = () => {
@@ -56,7 +61,7 @@ const drawPolyline = (coords, color = "#2ecc71", id = "route-line") => {
 
   if (map.value.getSource(id)) {
     map.value.getSource(id).setData(geojson);
-    if (mapContainer.value.getLayer(id)) {
+    if (map.value.getLayer(id)) {
       map.value.setPaintProperty(id, "line-color", color);
     }
   } else {
@@ -152,23 +157,52 @@ const loadRecommendedRoutes = async () => {
   clearMap();
 
   let dataToRender = null;
+  let isExpired = false;
 
   /* ============================
       0️⃣ — AMBIL DARI LOCALSTORAGE
       ============================ */
-  const lsData = localStorage.getItem("routeData");
+  const lsData = localStorage.getItem(CACHE_KEY);
 
   if (lsData) {
-    dataToRender = JSON.parse(lsData);
-    console.log("Loaded from LocalStorage:", dataToRender);
+    try {
+      const parsed = JSON.parse(lsData);
+
+      // Cek Timestamp
+      const timeElapsed = Date.now() - parsed.timestamp;
+
+      if (timeElapsed > CACHE_DURATION_MS) {
+        // === JIKA KADALUARSA ===
+        console.warn("Data rute kadaluarsa. Menghapus data lokal...");
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem("startLocationName");
+        localStorage.removeItem("endLocationName");
+
+        isExpired = true;
+        alert("Sesi rute telah berakhir. Jalur tidak lagi ditampilkan.");
+
+        // STOP DISINI, JANGAN LANJUT KE RENDER ATAU API FALLBACK
+        routeResult.value = null;
+        isPanelVisible.value = false;
+        return;
+      } else {
+        // === JIKA DATA MASIH VALID ===
+        console.log("Loaded valid data from LocalStorage");
+        dataToRender = parsed.data; // Ambil object data aslinya
+      }
+    } catch (e) {
+      console.error("Error parsing localstorage:", e);
+      localStorage.removeItem(CACHE_KEY);
+    }
   }
 
   /* ============================
-      1️⃣ — (opsional) fallback dari URL (dipertahankan)
+      1️⃣ — (opsional) fallback dari URL 
+      (Hanya dijalankan jika TIDAK expired dan dataToRender masih kosong)
       ============================ */
   const rawData = route.query.data;
 
-  if (!dataToRender && rawData) {
+  if (!isExpired && !dataToRender && rawData) {
     try {
       let decoded = decodeURIComponent(rawData);
       decoded = decodeURIComponent(decoded);
@@ -180,13 +214,14 @@ const loadRecommendedRoutes = async () => {
 
   /* ============================
       2️⃣ — fallback panggil API
+      (Hanya dijalankan jika TIDAK expired dan dataToRender masih kosong)
       ============================ */
   const start_lat = route.query.start_lat;
   const start_lng = route.query.start_lng;
   const end_lat = route.query.end_lat;
   const end_lng = route.query.end_lng;
 
-  if (!dataToRender && start_lat && end_lat) {
+  if (!isExpired && !dataToRender && start_lat && end_lat) {
     const url = `${apiBaseUrl}/rekomendasi-angkot?start_lat=${start_lat}&start_lng=${start_lng}&end_lat=${end_lat}&end_lng=${end_lng}`;
 
     try {
@@ -202,34 +237,42 @@ const loadRecommendedRoutes = async () => {
   // ----------------------------------------------------
   // 🚀 LOGIKA RENDERING UTAMA (DIJALANKAN DI AKHIR)
   // ----------------------------------------------------
-  if (dataToRender) {
+  if (dataToRender && dataToRender.status === "success") {
+    routeResult.value = dataToRender;
+    isPanelVisible.value = true;
+
     if (dataToRender.type === "single") renderSingleRoute(dataToRender);
     else if (dataToRender.type === "double") renderDoubleRoute(dataToRender);
-    // Catatan: Pastikan renderTripleRoute sudah disesuaikan dengan format data yang benar
     else if (dataToRender.type === "triple") renderTripleRoute(dataToRender);
-  }
 
-  // 🚩 TAMBAHKAN MARKER PENGGUNA (START & END)
-  if (start_lat && start_lng) {
-    addMarker(parseFloat(start_lng), parseFloat(start_lat), "green");
-  }
+    // 🚩 TAMBAHKAN MARKER PENGGUNA (START & END)
+    // Marker hanya muncul jika rute berhasil dimuat
+    if (start_lat && start_lng) {
+      addMarker(parseFloat(start_lng), parseFloat(start_lat), "green");
+    }
 
-  if (end_lat && end_lng) {
-    addDropMarker(parseFloat(end_lng), parseFloat(end_lat));
-  }
+    if (end_lat && end_lng) {
+      addDropMarker(parseFloat(end_lng), parseFloat(end_lat));
+    }
 
-  // Perluasan batasan peta untuk mencakup Start dan End
-  if (start_lat && end_lat) {
-    const bounds = new maptilersdk.LngLatBounds();
-    bounds.extend([parseFloat(start_lng), parseFloat(start_lat)]);
-    bounds.extend([parseFloat(end_lng), parseFloat(end_lat)]);
+    // Perluasan batasan peta untuk mencakup Start dan End
+    if (start_lat && end_lat) {
+      const bounds = new maptilersdk.LngLatBounds();
+      bounds.extend([parseFloat(start_lng), parseFloat(start_lat)]);
+      bounds.extend([parseFloat(end_lng), parseFloat(end_lat)]);
 
-    map.value.fitBounds(bounds, {
-      padding: 50,
-      duration: 1500,
-    });
+      map.value.fitBounds(bounds, {
+        padding: 50,
+        duration: 1500,
+      });
+    }
+  } else {
+    routeResult.value = null;
+    isPanelVisible.value = false;
+    console.warn("No successful route data found or session expired.");
   }
 };
+
 /* =========== INISIALISASI MAP ============== */
 onMounted(() => {
   maptilersdk.config.apiKey = apiKey;
@@ -257,6 +300,15 @@ onMounted(() => {
     <div class="relative w-full flex-1" style="height: calc(100vh - 64px)">
       <div class="w-full h-full absolute top-0 left-0" ref="mapContainer"></div>
 
+      <div
+        v-if="!routeResult"
+        class="absolute top-5 left-1/2 -translate-x-1/2 z-50 bg-white/90 px-4 py-2 rounded-lg shadow-md border border-red-200"
+      >
+        <p class="text-xs text-red-500 font-semibold">
+          Tidak ada jalur ditampilkan (Sesi berakhir)
+        </p>
+      </div>
+
       <button
         @click="goToCariRute"
         class="absolute bottom-27 right-5 bg-[#72BD43] hover:bg-[#467529] rounded-full shadow-md w-13 h-13 flex items-center justify-center transition-transform active:scale-95 z-40"
@@ -264,9 +316,9 @@ onMounted(() => {
         <img src="/src/assets/buttonimg.png" alt="carirute" class="w-7 h-7" />
       </button>
 
-      <!-- Bottom Panel Component -->
       <RouteDetailPanel
         :is-visible="isPanelVisible"
+        :route-data="routeResult"
         @close="isPanelVisible = false"
       />
     </div>

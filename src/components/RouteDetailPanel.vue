@@ -1,27 +1,57 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 
 const props = defineProps({
   isVisible: Boolean,
+  routeData: Object,
 });
 
 const emit = defineEmits(["close"]);
 
-// Dummy Data
-const fares = [
-  { label: "SD", price: "Rp 2.000" },
-  { label: "SMP", price: "Rp 3.000" },
-  { label: "SMA/SMK", price: "Rp 4.000" },
-  { label: "Umum", price: "Rp 5.000" },
-];
+const formatRupiah = (number) => {
+  if (!number) return "Rp 0";
+  const cleanedNumber = String(number).replace(/\.00$/, "");
 
-const angkotRoutes = [
-  { code: "05", color: "#3498db", name: "Angkot 05 (Rawabango)" },
-  { code: "03", color: "#e67e22", name: "Angkot 02 (Cikidang)" },
-];
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(cleanedNumber);
+};
+
+const angkotRoutes = computed(() => {
+  if (!props.routeData || !props.routeData.routes) return [];
+
+  return props.routeData.routes.map((r, index) => ({
+    code: r.angkot?.kode_trayek || "N/A",
+    color: r.angkot?.warna || (index === 0 ? "#3498db" : "#9b59b6"),
+    name: r.angkot?.trayek || "Rute Angkot",
+  }));
+});
+
+const fares = computed(() => {
+  if (
+    !props.routeData ||
+    !props.routeData.routes ||
+    props.routeData.routes.length === 0
+  )
+    return [];
+
+  // Ambil data tarif dari rute pertama (Asumsi: Tarif angkot sama di Cianjur)
+  const angkot = props.routeData.routes[0].angkot;
+  if (!angkot) return [];
+
+  // Karena bisa Single atau Double, kita ambil tarif dari Angkot pertama
+  return [
+    { label: "SD", price: formatRupiah(angkot.tarif_sd) },
+    { label: "SMP", price: formatRupiah(angkot.tarif_smp || angkot.tarif_smp) },
+    { label: "SMA/SMK", price: formatRupiah(angkot.tarif_sma) },
+    { label: "Umum", price: formatRupiah(angkot.tarif_umum) },
+  ].filter((fare) => fare.price !== "Rp 0"); // Hapus jika tarif 0
+});
 
 // Drag Logic area
-const PARTIAL_OFFSET = 450; // Pixels to hide initially (hides fare section) 
+const PARTIAL_OFFSET = 450; // Pixels to hide initially (hides fare section)
 const startY = ref(0);
 const startTranslateY = ref(0);
 const currentTranslateY = ref(PARTIAL_OFFSET); // Start at partial
@@ -76,18 +106,30 @@ const panelStyle = computed(() => ({
   touchAction: "none",
 }));
 
+// Logika untuk memastikan panel kembali ke PARTIAL_OFFSET saat dibuka (setelah ditutup)
+watch(
+  () => props.isVisible,
+  (newVal) => {
+    if (newVal) {
+      // Tunda sedikit agar transisi 'v-if' selesai
+      setTimeout(() => {
+        currentTranslateY.value = PARTIAL_OFFSET;
+      }, 10);
+    }
+  }
+);
+
 // Reset state when visibility changes (optional, ensures it opens partially)
 // Watch props.isVisible if needed, but current init is fine.
 </script>
 
 <template>
   <div
-    v-if="isVisible"
+    v-if="isVisible && angkotRoutes.length > 0"
     ref="panelRef"
     class="fixed bottom-0 left-0 w-full bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-50 overflow-hidden flex flex-col max-h-[90vh]"
     :style="panelStyle"
   >
-    <!-- Drag Handle Area -->
     <div
       class="w-full pt-4 pb-2 flex justify-center cursor-grab active:cursor-grabbing touch-none"
       @mousedown="handleStart"
@@ -101,11 +143,9 @@ const panelStyle = computed(() => ({
       <div class="w-12 h-1.5 bg-gray-300 rounded-full"></div>
     </div>
 
-    <!-- Content -->
     <div class="px-6 pb-8 overflow-y-auto">
       <h2 class="text-xl font-bold text-gray-800 mb-4">Detail Perjalanan</h2>
 
-      <!-- Urutan Angkot -->
       <div class="mb-6">
         <h3
           class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider"
@@ -113,7 +153,6 @@ const panelStyle = computed(() => ({
           Rute Angkot
         </h3>
         <div class="flex flex-col space-y-4 relative">
-          <!-- Timeline Line -->
           <div
             class="absolute left-3.5 top-3 bottom-3 w-0.5 bg-gray-200 -z-10"
           ></div>
@@ -127,31 +166,43 @@ const panelStyle = computed(() => ({
               class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0"
               :style="{ backgroundColor: angkot.color }"
             >
-              {{ index + 1 }}
+              {{ angkot.code }}
             </div>
             <div
               class="flex-1 p-3 bg-gray-50 rounded-xl border border-gray-100 shadow-sm"
             >
               <div class="flex items-center justify-between">
-                <span class="font-bold text-gray-800">{{ angkot.code }}</span>
+                <span class="font-bold text-gray-800">{{ angkot.name }}</span>
                 <span
                   class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
-                  >Angkot</span
+                  >Angkot {{ index + 1 }}</span
                 >
               </div>
-              <p class="text-sm text-gray-600 mt-0.5">{{ angkot.name }}</p>
+              <p
+                v-if="index === 0 && angkotRoutes.length > 1"
+                class="text-xs text-gray-500 mt-1"
+              >
+                Naik dari titik penjemputan awal, Turun di titik transfer.
+              </p>
+              <p
+                v-else-if="index === 1 && angkotRoutes.length > 1"
+                class="text-xs text-gray-500 mt-1"
+              >
+                Naik dari titik transfer, Turun di tujuan akhir.
+              </p>
+              <p v-else class="text-xs text-gray-500 mt-1">
+                Naik dari titik penjemputan, Turun di tujuan akhir.
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Tarif -->
       <div class="pb-10">
-        <!-- Extra padding for bounce -->
         <h3
           class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider"
         >
-          Estimasi Tarif
+          Estimasi Tarif (Per Angkot)
         </h3>
         <div class="grid grid-cols-2 gap-3">
           <div
