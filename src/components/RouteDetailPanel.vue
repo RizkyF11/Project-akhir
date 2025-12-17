@@ -51,7 +51,7 @@ const fares = computed(() => {
 });
 
 // Drag Logic area
-const PARTIAL_OFFSET = 450; // Pixels to hide initially (hides fare section)
+const PARTIAL_OFFSET = 0; // Pixels to hide initially (hides fare section)
 const startY = ref(0);
 const startTranslateY = ref(0);
 const currentTranslateY = ref(PARTIAL_OFFSET); // Start at partial
@@ -125,7 +125,7 @@ watch(
 
 <template>
   <div
-    v-if="isVisible && angkotRoutes.length > 0"
+    v-if="true"
     ref="panelRef"
     class="fixed bottom-0 left-0 w-full bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-50 overflow-hidden flex flex-col max-h-[90vh]"
     :style="panelStyle"
@@ -173,7 +173,7 @@ watch(
             >
               <div class="flex items-center justify-between">
                 <span class="font-bold text-gray-800">{{ angkot.name }}</span>
-                <span
+                <span x
                   class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
                   >Angkot {{ index + 1 }}</span
                 >

@@ -1,13 +1,13 @@
 <script setup>
 import Header from "../../components/Header.vue";
-import { ref, onMounted, computed, nextTick } from "vue"; // Tambahkan nextTick
+import { ref, onMounted, computed, nextTick } from "vue";
 import { Icon } from "@iconify/vue";
-import * as maptilersdk from "@maptiler/sdk"; // Import MapTiler SDK
-import "@maptiler/sdk/dist/maptiler-sdk.css"; // Import CSS MapTiler
+import * as maptilersdk from "@maptiler/sdk";
+import "@maptiler/sdk/dist/maptiler-sdk.css";
 
 const searchQuery = ref("");
 const apiBaseUrl = import.meta.env.VITE_API_URL;
-const apiKey = import.meta.env.VITE_MAPTILER_API_KEY; // API Key MapTiler
+const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
 
 // === STATE DATA ===
 const angkotRoutes = ref([]);
@@ -16,121 +16,10 @@ const isLoading = ref(true);
 // === MODAL & MAP STATE ===
 const showModal = ref(false);
 const selectedRoute = ref(null);
-const detailMapContainer = ref(null); // Ref untuk div peta di modal
+const detailMapContainer = ref(null); // Container untuk peta
 const detailMap = ref(null); // Instance peta
 
-// ... (Bagian import dan deklarasi tetap sama) ...
-
-// Fungsi Fallback Reverse Geocoding (Poin 3)
-const fetchStreetNamesFallback = async (coordinates) => {
-  const N = coordinates.length;
-  let routeList = new Set();
-
-  // Ambil sampel setiap 50 koordinat untuk menghemat kuota API
-  for (let i = 0; i < N; i += 50) {
-    const coord = coordinates[i];
-    const geoUrl = `https://api.maptiler.com/geocoding/${coord.lng},${coord.lat}.json?key=${apiKey}&limit=1`;
-
-    try {
-      const response = await fetch(geoUrl);
-      const data = await response.json();
-
-      if (data.features && data.features.length > 0) {
-        // Ambil komponen pertama (nama jalan)
-        const place = data.features[0].place_name;
-        const streetName = place.split(",")[0].trim();
-
-        if (streetName && streetName !== "" && streetName !== "Unnamed Road") {
-          routeList.add(streetName);
-        }
-      }
-    } catch (e) {
-      continue; // Lanjutkan ke titik berikutnya jika gagal
-    }
-  }
-
-  if (routeList.size > 0) {
-    return (
-      "Jalur Angkot Melalui (Perkiraan): \n- " +
-      Array.from(routeList).join("\n- ")
-    );
-  }
-  return "Tidak dapat memetakan jalur angkot.";
-};
-
-// Fungsi Utama: Coba Routing (Poin 1), jika Gagal 404, panggil Fallback
-const fetchRouteName = async (coordinates) => {
-  // 1. Tentukan Waypoints untuk Rute Memutar (Menggunakan 4 Titik untuk Rute Panjang)
-  const N = coordinates.length;
-  if (N < 100) {
-    // Jika koordinat terlalu sedikit, coba Fallback langsung
-    console.warn(
-      "Rute terlalu pendek, langsung menggunakan Fallback Geocoding."
-    );
-    return await fetchStreetNamesFallback(coordinates);
-  }
-
-  const p1 = coordinates[0];
-  const p2 = coordinates[Math.floor(N * 0.25)];
-  const p3 = coordinates[Math.floor(N * 0.5)];
-  const p4 = coordinates[Math.floor(N * 0.75)];
-
-  // Waypoints: P1 -> P2 -> P3 -> P4
-  const waypoints = `${p1.lng},${p1.lat};${p2.lng},${p2.lat};${p3.lng},${p3.lat};${p4.lng},${p4.lat}`;
-  const routeUrl = `https://api.maptiler.com/v3/routes/driving/${waypoints}.json?key=${apiKey}&alternatives=false&geometries=geojson&steps=true`;
-
-  try {
-    const response = await fetch(routeUrl);
-
-    if (!response.ok) {
-      // **Jika gagal 404/400 (karena rute ditolak), gunakan Fallback**
-      console.error(
-        `Routing API Gagal [Status ${response.status}]. Beralih ke Fallback Geocoding.`
-      );
-      return await fetchStreetNamesFallback(coordinates);
-    }
-
-    // 2. Jika OK, proses JSON Routing
-    const data = await response.json();
-
-    if (data.code === "Ok" && data.routes && data.routes[0].legs) {
-      let routeList = new Set();
-      data.routes[0].legs.forEach((leg) => {
-        leg.steps.forEach((step) => {
-          if (step.name && step.name.trim() !== "") {
-            routeList.add(step.name.trim());
-          }
-        });
-      });
-
-      if (routeList.size > 0) {
-        return (
-          "Jalur Angkot Melalui: \n- " + Array.from(routeList).join("\n- ")
-        );
-      }
-    }
-    return "Routing berhasil, tetapi tidak ada nama jalan yang diekstrak.";
-  } catch (error) {
-    console.error(
-      "Terjadi kesalahan koneksi saat Routing, menggunakan Fallback:",
-      error
-    );
-    return await fetchStreetNamesFallback(coordinates);
-  }
-};
-
-// Fungsi Format Rupiah
-const formatRupiah = (angka) => {
-  if (!angka) return "Rp 0";
-  const raw = String(angka).replace(".00", "");
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(raw);
-};
-
-// 1. Fetch Data List
+// 1. Fetch Data List Angkot (Halaman Utama)
 onMounted(async () => {
   try {
     const response = await fetch(`${apiBaseUrl}/angkot`);
@@ -141,6 +30,7 @@ onMounted(async () => {
         let start = item.nama_trayek;
         let end = "";
 
+        // Logic memecah nama trayek (Start - End)
         if (item.nama_trayek.includes("->")) {
           const parts = item.nama_trayek.split("->");
           start = parts[0].trim();
@@ -162,13 +52,13 @@ onMounted(async () => {
       });
     }
   } catch (error) {
-    console.error("Gagal memuat data:", error);
+    console.error("Gagal memuat data list:", error);
   } finally {
     isLoading.value = false;
   }
 });
 
-// 2. Computed Search
+// 2. Filter Pencarian
 const filteredRoutes = computed(() => {
   if (!searchQuery.value) return angkotRoutes.value;
   const lower = searchQuery.value.toLowerCase();
@@ -179,13 +69,13 @@ const filteredRoutes = computed(() => {
   );
 });
 
-// 3. Open Modal & Render Map
+// 3. Buka Modal & Tampilkan Peta + Deskripsi
 const openModal = async (summaryRoute) => {
-  // Reset data lama
+  // Reset state modal
   selectedRoute.value = {
     ...summaryRoute,
-    deskripsi: "Memuat detail tarif dan peta...",
-    coordinates: [],
+    deskripsi: "Memuat detail rute...",
+    rutes: [], // Reset data map
   };
   showModal.value = true;
 
@@ -197,35 +87,19 @@ const openModal = async (summaryRoute) => {
       const detail = result.data;
       const rutes = detail.rutes || [];
 
-      const deskripsiAwal = `
-        Status Angkot: ${
-          detail.aktif == 1 ? "Aktif Beroperasi" : "Tidak Aktif"
-        }. 
-        Daftar Tarif Resmi: 
-        Umum (${formatRupiah(detail.tarif_umum)}), 
-        Pelajar SMA (${formatRupiah(detail.tarif_sma)}), 
-        Pelajar SMP (${formatRupiah(detail.tarif_smp)}), 
-        Pelajar SD (${formatRupiah(detail.tarif_sd)}).
-      `;
+      // A. SET DESKRIPSI (Dari Database)
+      const deskripsiText = detail.rute_deskripsi
+        ? detail.rute_deskripsi
+        : "Detail jalur belum tersedia di database.";
 
-      if (rutes.length > 0 && rutes[0].coordinates.length > 1) {
-        const routeNamesText = await fetchRouteName(rutes[0].coordinates);
-
-        selectedRoute.value.deskripsi = deskripsiAwal + "\n\n" + routeNamesText;
-      } else {
-        selectedRoute.value.deskripsi =
-          deskripsiAwal + "\n\nData koordinat jalur tidak ditemukan.";
-      }
-
+      // B. SET DATA UNTUK MODAL
       selectedRoute.value = {
         ...selectedRoute.value,
-        // deskripsi: deskripsiText,
-        // Ambil semua rute dan koordinatnya
-        rutes: rutes,
+        deskripsi: deskripsiText,
+        rutes: rutes, // PENTING: Data ini dipakai untuk menggambar peta
       };
 
-      // === INISIALISASI PETA ===
-      // Kita harus menunggu DOM render modal selesai dulu
+      // C. RENDER PETA (Tunggu DOM siap)
       await nextTick();
       initDetailMap(rutes);
     }
@@ -237,41 +111,43 @@ const openModal = async (summaryRoute) => {
 
 const closeModal = () => {
   showModal.value = false;
-  // Hapus map instance untuk mencegah memory leak / error saat dibuka lagi
+  // Hapus instance map agar tidak berat
   if (detailMap.value) {
     detailMap.value.remove();
     detailMap.value = null;
   }
 };
 
-// Fungsi Render Peta Detail
+// === FUNGSI RENDER PETA (VISUALISASI JALUR) ===
+// Fungsi ini Tetap ADA untuk menggambar garis di peta
 const initDetailMap = (rutes) => {
+  // Cek apakah container dan data tersedia
   if (!detailMapContainer.value) return;
-  if (!rutes || rutes.length === 0) return; // Jika tidak ada koordinat, jangan load map
+  if (!rutes || rutes.length === 0) return;
 
   maptilersdk.config.apiKey = apiKey;
 
-  // 1. Ambil koordinat dari rute pertama (sebagai default center)
-  // Format API: [{lat, lng}, {lat, lng}] -> Maptiler butuh: [[lng, lat], [lng, lat]]
+  // Format data koordinat dari API ke format MapTiler [lng, lat]
+  // Pastikan mengambil dari rute pertama (index 0)
   const routeCoords = rutes[0].coordinates.map((c) => [c.lng, c.lat]);
 
   if (routeCoords.length === 0) return;
 
   const startPoint = routeCoords[0];
 
-  // 2. Buat Peta
+  // Buat Peta
   detailMap.value = new maptilersdk.Map({
     container: detailMapContainer.value,
     style: maptilersdk.MapStyle.STREETS,
     center: startPoint,
     zoom: 14,
-    navigationControl: false, // Opsi: sembunyikan kontrol zoom agar bersih
+    navigationControl: false,
     geolocateControl: false,
   });
 
-  // 3. Tambahkan Jalur saat load
+  // Saat peta siap, gambar garisnya
   detailMap.value.on("load", () => {
-    // Tambahkan Source
+    // 1. Tambahkan Sumber Data (GeoJSON)
     detailMap.value.addSource("route-detail", {
       type: "geojson",
       data: {
@@ -284,7 +160,7 @@ const initDetailMap = (rutes) => {
       },
     });
 
-    // Tambahkan Layer Garis
+    // 2. Tambahkan Layer Garis (Visualisasi)
     detailMap.value.addLayer({
       id: "route-detail-line",
       type: "line",
@@ -294,12 +170,12 @@ const initDetailMap = (rutes) => {
         "line-cap": "round",
       },
       paint: {
-        "line-color": selectedRoute.value.warna_angkot || "#ff0000", // Warna sesuai angkot
+        "line-color": selectedRoute.value.warna_angkot || "#ff0000",
         "line-width": 4,
       },
     });
 
-    // Fit Bounds (Agar seluruh rute terlihat)
+    // 3. Fit Zoom agar seluruh jalur terlihat
     const bounds = new maptilersdk.LngLatBounds();
     routeCoords.forEach((coord) => bounds.extend(coord));
     detailMap.value.fitBounds(bounds, { padding: 40 });
@@ -381,7 +257,7 @@ const initDetailMap = (rutes) => {
         v-if="selectedRoute"
         class="w-[90%] bg-white rounded-2xl shadow-xl overflow-hidden animate-slideUp max-h-[90vh] flex flex-col"
       >
-        <div class="overflow-y-auto w-full">
+        <div class="overflow-y-auto w-full no-scrollbar">
           <div class="relative w-full">
             <div class="flex flex-col w-full">
               <div class="h-12 bg-red-600"></div>
@@ -414,19 +290,22 @@ const initDetailMap = (rutes) => {
               v-if="!selectedRoute.rutes || selectedRoute.rutes.length === 0"
               class="text-xs text-center text-gray-400 mt-2"
             >
-              Tidak ada data jalur peta tersedia.
+              Memuat peta atau data jalur tidak tersedia...
             </p>
           </div>
 
-          <p
-            class="text-gray-600 text-sm text-justify leading-relaxed px-5 mb-4 whitespace-pre-line"
-          >
-            {{ selectedRoute.deskripsi }}
-          </p>
+          <div class="px-5 mb-4">
+            <h3 class="font-bold text-gray-800 mb-1">Rute Lintasan:</h3>
+            <p
+              class="text-gray-600 text-sm text-left leading-relaxed whitespace-pre-line"
+            >
+              {{ selectedRoute.deskripsi }}
+            </p>
+          </div>
 
           <div class="flex justify-center pb-4">
             <button
-              class="px-6 py-2 bg-red-500 text-white rounded-lg shadow"
+              class="px-6 py-2 bg-red-500 text-white rounded-lg shadow hover:bg-red-600 transition"
               @click="closeModal"
             >
               Tutup
