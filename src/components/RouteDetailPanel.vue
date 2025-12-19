@@ -127,7 +127,7 @@ watch(
   <div
     v-if="true"
     ref="panelRef"
-    class="fixed bottom-0 left-0 w-full bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-50 overflow-hidden flex flex-col max-h-[90vh]"
+    class="fixed bottom-0 left-1/2 w-full max-w-[425px] -translate-x-1/2 bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-50 overflow-hidden flex flex-col max-h-[90vh]"
     :style="panelStyle"
   >
     <div
@@ -173,7 +173,8 @@ watch(
             >
               <div class="flex items-center justify-between">
                 <span class="font-bold text-gray-800">{{ angkot.name }}</span>
-                <span x
+                <span
+                  x
                   class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
                   >Angkot {{ index + 1 }}</span
                 >
@@ -194,6 +195,54 @@ watch(
                 Naik dari titik penjemputan, Turun di tujuan akhir.
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <h3
+          class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider"
+        >
+          Keterangan Peta
+        </h3>
+        <div
+          class="bg-gray-50 border border-gray-100 rounded-xl p-4 flex flex-col gap-3"
+        >
+          <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-6 h-6">
+              <div
+                class="absolute w-full h-full bg-red-100 rounded-full animate-ping opacity-75"
+              ></div>
+              <Icon
+                icon="mdi:map-marker"
+                class="text-red-500 text-2xl relative z-10 drop-shadow-sm"
+              />
+            </div>
+            <span class="text-sm font-medium text-gray-700"
+              >Titik Sekarang</span
+            >
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-6 h-6">
+              <Icon
+                icon="mdi:map-marker"
+                class="text-yellow-400 text-2xl relative z-10 drop-shadow-sm"
+              />
+            </div>
+            <span class="text-sm font-medium text-gray-700"
+              >Titik Transfer ke Angkot Selanjutnya</span
+            >
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-6 h-6">
+              <Icon
+                icon="mdi:map-marker"
+                class="text-green-500 text-2xl relative z-10 drop-shadow-sm"
+              />
+            </div>
+            <span class="text-sm font-medium text-gray-700">Titik Tujuan</span>
           </div>
         </div>
       </div>
