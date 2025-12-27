@@ -51,7 +51,7 @@ const fares = computed(() => {
 });
 
 // Drag Logic area
-const PARTIAL_OFFSET = 0; // Pixels to hide initially (hides fare section)
+const PARTIAL_OFFSET = 450; // Pixels to hide initially (hides fare section)
 const startY = ref(0);
 const startTranslateY = ref(0);
 const currentTranslateY = ref(PARTIAL_OFFSET); // Start at partial
@@ -125,7 +125,7 @@ watch(
 
 <template>
   <div
-    v-if="true"
+    v-if="isVisible && angkotRoutes.length > 0"
     ref="panelRef"
     class="fixed bottom-0 left-1/2 w-full max-w-[425px] -translate-x-1/2 bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-50 overflow-hidden flex flex-col max-h-[90vh]"
     :style="panelStyle"

@@ -7,62 +7,36 @@ import { useRouter } from "vue-router";
 import { getRekomendasiAngkot } from "../../services/angkotService";
 
 // ================================
-// STATE
+// STATE & CONFIG
 // ================================
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
-
 const CACHE_KEY = "routeData";
 const CACHE_DURATION_MS = 5 * 60 * 60 * 1000;
 
 const router = useRouter();
 
-const startError = ref(""); //pesan error lokasi awal
-const endError = ref(""); //pesan error lokasi tujuan
-
+const startError = ref("");
+const endError = ref("");
 const startLocation = ref("");
 const startCoords = ref([null, null]); // [lng, lat]
-
 const endLocation = ref("");
 const endCoords = ref([null, null]); // [lng, lat]
 
 const panelMode = ref("start"); // "start" atau "end"
-
 const activePanel = ref(false);
 const suggestions = ref([]);
 
-// prioritaskan area cianjur
-// batas wilayah cianjur (perkiraan akurat)
+// Batas wilayah Cianjur (bounding box)
 const CIANJUR_BBOX = "106.83,-7.55,107.45,-6.71";
 
 // ================================
-// BOTTOM SHEET DRAGGABLE
+// BOTTOM SHEET LOGIC
 // ================================
-const panelHeight = ref("50%"); // posisi default
+const panelHeight = ref("50%");
 const startY = ref(0);
 const currentHeight = ref(0);
-const snapPoints = [0.25, 0.5, 0.75]; // 25%, 50%, 75%
+const snapPoints = [0.25, 0.5, 0.75];
 
-const cleanupRouteData = () => {
-  const cachedItem = localStorage.getItem(CACHE_KEY);
-  if (!cachedItem) return;
-
-  try {
-    const cacheData = JSON.parse(cachedItem);
-    const timeElapsed = Date.now() - cacheData.timestamp;
-
-    // Jika data sudah kadaluarsa, hapus dari localStorage
-    if (timeElapsed > CACHE_DURATION_MS) {
-      localStorage.removeItem(CACHE_KEY);
-      localStorage.removeItem("startLocationName");
-      localStorage.removeItem("endLocationName");
-      console.log("Data rekomendasi rute lama telah dihapus (Expired).");
-    }
-  } catch (e) {
-    // Hapus jika data rusak
-    localStorage.removeItem(CACHE_KEY);
-    console.error("Error saat membersihkan cache rute:", e);
-  }
-};
 const startDrag = (e) => {
   startY.value = e.touches[0].clientY;
   currentHeight.value = parseInt(panelHeight.value);
@@ -71,7 +45,6 @@ const startDrag = (e) => {
 const onDrag = (e) => {
   const delta = startY.value - e.touches[0].clientY;
   const vh = window.innerHeight;
-
   const percent = (((currentHeight.value * vh) / 100 + delta) / vh) * 100;
   const clamped = Math.min(Math.max(percent, 20), 90);
   panelHeight.value = `${clamped}%`;
@@ -86,50 +59,69 @@ const endDrag = () => {
 };
 
 watch(activePanel, (val) => {
-  if (val) {
-    document.body.style.overflow = "hidden"; //disable scroll
-  } else {
-    document.body.style.overflow = "auto"; //enable scroll
+  document.body.style.overflow = val ? "hidden" : "auto";
+});
+
+// ================================
+// REVERSE GEOCODING (MAPTILER + OSM FALLBACK)
+// ================================
+
+// 1. Fungsi Cadangan: OpenStreetMap (Nominatim)
+const reverseGeocodeOSM = async (lng, lat) => {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        // Ganti dengan email/nama project Anda agar tidak kena blokir
+        "User-Agent": "AngkotinApp/1.0 (project-angkotin@example.com)",
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.display_name) {
+      // Ambil 3 bagian pertama (Nama Jalan, Desa/Kel, Kec)
+      return data.display_name.split(",").slice(0, 3).join(",");
+    }
+    return null;
+  } catch (e) {
+    console.error("OSM Fallback error:", e);
+    return null;
   }
-});
+};
 
-// ================================
-// POP UP IZIN LOKASI
-// ================================
-onMounted(() => {
-  const izin = confirm("Aktifkan lokasi untuk mendeteksi lokasi anda?");
-  if (izin) getMyLocation();
-});
-
-// ================================
-// REVERSE GEOCODING MAPTILER
-// (format benar + diutamakan area cianjur)
-// ================================
+// 2. Fungsi Utama: MapTiler dengan Fallback
 const reverseGeocode = async (lng, lat) => {
-  console.log("Reverse input:", lng, lat); // debug
   const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${apiKey}`;
-
   try {
     const res = await fetch(url);
-    if (!res.ok) {
-      return "Lokasi tidak diketahui";
-    }
+    if (!res.ok) throw new Error("MapTiler error");
 
     const data = await res.json();
-    if (!data.features?.length) return "Lokasi tidak diketahui";
+    const hasData = data.features && data.features.length > 0;
+    const firstFeature = hasData ? data.features[0].place_name : "";
 
-    // prioritaskan tempat cianjur
-    const poi = data.features.find((f) => (f.place_type ?? []).includes("poi"));
+    // JIKA MAPTILER GAGAL / UNKNOWN, GUNAKAN OSM
+    if (!hasData || firstFeature.toLowerCase().includes("unknown")) {
+      console.log("MapTiler minim data, mencoba OSM...");
+      const osmResult = await reverseGeocodeOSM(lng, lat);
+      if (osmResult) return osmResult;
+    }
 
-    return poi?.place_name || data.features[0].place_name;
+    // Prioritaskan POI dari MapTiler jika ada
+    const poi = data.features?.find((f) =>
+      (f.place_type ?? []).includes("poi")
+    );
+    return poi?.place_name || firstFeature || "Lokasi tidak diketahui";
   } catch (e) {
-    console.error("Reverse geocode error:", e);
-    return "Lokasi Tidak Diketahui";
+    console.error("Reverse geocode error, trying OSM:", e);
+    return (
+      (await reverseGeocodeOSM(lng, lat)) || "Lokasi Terdeteksi (Gunakan Pin)"
+    );
   }
 };
 
 // ================================
-// GPS OTOMATIS (ISI INPUT OTOMATIS)
+// GPS & SEARCH LOGIC
 // ================================
 const getMyLocation = () => {
   if (!navigator.geolocation) {
@@ -137,31 +129,29 @@ const getMyLocation = () => {
     return;
   }
 
+  startLocation.value = "Mencari alamat...";
+
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
-
       startCoords.value = [longitude, latitude];
 
       const place = await reverseGeocode(longitude, latitude);
-
-      startLocation.value = place || "Lokasi saya saat ini";
+      startLocation.value = place;
     },
-    () => alert("Gagal mendapatkan lokasi. Pastikan GPS aktif."),
+    () => {
+      startLocation.value = "";
+      alert("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
+    },
     { enableHighAccuracy: true }
   );
 };
 
-// ================================
-// SEARCH LOKASI MAPTILER
-// ================================
 const fetchGeocode = async (query) => {
   if (!query?.trim()) {
     suggestions.value = [];
     return;
   }
-
-  // prefill “cianjur” untuk memaksa hasil lebih relevan
   let q = query.trim();
   if (q.split(" ").length <= 2 && !q.toLowerCase().includes("cianjur")) {
     q = `${q} cianjur`;
@@ -169,17 +159,16 @@ const fetchGeocode = async (query) => {
 
   const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
     q
-  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatc=true&autocomplete=true&types=poi,address,street,place`;
+  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatch=true&autocomplete=true&types=poi,address,street,place`;
 
   try {
     const res = await fetch(url);
     const data = await res.json();
-
     const distanceToCianjur = (coords) => {
       const [lng, lat] = coords;
-      const dx = lng - 107.139038;
-      const dy = lat + 6.817977;
-      return Math.sqrt(dx * dx + dy * dy);
+      return Math.sqrt(
+        Math.pow(lng - 107.139038, 2) + Math.pow(lat + 6.817977, 2)
+      );
     };
 
     suggestions.value =
@@ -196,45 +185,27 @@ const fetchGeocode = async (query) => {
   }
 };
 
-// ================================
-// PILIH LOKASI DARI SUGGESTION
-// ================================
 const pickSuggestion = (item) => {
   if (panelMode.value === "start") {
     startLocation.value = item.name;
     startCoords.value = item.coords;
-
-    console.log("====== Lokasi Awal Dipilih ======");
-    console.log("📍 Nama lokasi awal:", item.name);
-    console.log("📌 Koordinat awal:", item.coords);
   } else {
     endLocation.value = item.name;
     endCoords.value = item.coords;
-
-    console.log("====== Tujuan dipilih ======");
-    console.log("📍 Tujuan:", item.name);
-    console.log("📌 Koordinat Tujuan:", item.coords);
   }
-
   activePanel.value = false;
 };
 
-/// ================================
-// NAVIGASI KE HALAMAN PETA
 // ================================
-// ================================
-// NAVIGASI KE HALAMAN PETA
+// NAVIGATION & CACHE
 // ================================
 const goToMap = async () => {
-  startError.value = "";
-  endError.value = "";
+  startError.value = startLocation.value ? "" : "Lokasi awal wajib diisi";
+  endError.value = endLocation.value ? "" : "Tujuan wajib diisi";
 
-  // ... (Kode validasi tidak berubah) ...
-
-  if (startError.value || endError.value) return;
-
+  if (!startLocation.value || !endLocation.value) return;
   if (!startCoords.value[0] || !endCoords.value[0]) {
-    alert("Lokasi belum dipilih dengan benar");
+    alert("Lokasi belum dipilih dengan benar dari daftar");
     return;
   }
 
@@ -242,45 +213,37 @@ const goToMap = async () => {
   const [endLng, endLat] = endCoords.value;
 
   try {
-    // Panggilan API
     const response = await getRekomendasiAngkot(
       startLat,
       startLng,
       endLat,
       endLng
     );
-
-    console.log("Hasil API:", response.data);
-
-    // 1. Simpan data besar ke LocalStorage
-    const dataToStore = {
-      timestamp: Date.now(),
-      data: response.data,
-    };
+    const dataToStore = { timestamp: Date.now(), data: response.data };
 
     localStorage.setItem(CACHE_KEY, JSON.stringify(dataToStore));
-
-    // Simpan nama lokasi (tidak perlu timeout karena data rute yang utama)
     localStorage.setItem("startLocationName", startLocation.value);
     localStorage.setItem("endLocationName", endLocation.value);
 
-    // 2. Navigasi tanpa membawa 'data' di query URL
     router.push({
       path: "/jalurmaps",
       query: {
-        // Data start/end tetap di sini
-        start_lat: startLat, // Gunakan variabel lokal startLat/startLng, bukan .value.lat
+        start_lat: startLat,
         start_lng: startLng,
         end_lat: endLat,
         end_lng: endLng,
       },
     });
-    // ==========================================
   } catch (err) {
     console.error(err);
     alert("Gagal memuat rekomendasi angkot");
   }
 };
+
+onMounted(() => {
+  const izin = confirm("Aktifkan lokasi untuk mendeteksi lokasi anda?");
+  if (izin) getMyLocation();
+});
 </script>
 
 <template>
@@ -297,19 +260,17 @@ const goToMap = async () => {
         />
         <input
           v-model="startLocation"
-          :disabled="activePanel"
-          @focus="
+          readonly
+          @click="
             () => {
               panelMode = 'start';
               activePanel = true;
             }
           "
-          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          class="flex-1 bg-transparent text-[#4c4a4a] focus:outline-none font-poppins cursor-pointer"
           placeholder="Pilih Lokasi Awal"
         />
       </div>
-
-      <!-- Error muncul tanpa mendorong -->
       <p
         v-if="startError"
         class="absolute text-red-500 text-sm left-3 -bottom-6"
@@ -328,27 +289,22 @@ const goToMap = async () => {
         />
         <input
           v-model="endLocation"
-          :disabled="activePanel"
-          @focus="
+          readonly
+          @click="
             () => {
               panelMode = 'end';
               activePanel = true;
             }
           "
-          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          class="flex-1 bg-transparent text-[#4c4a4a] focus:outline-none font-poppins cursor-pointer"
           placeholder="Pilih Tujuan"
         />
       </div>
-
-      <!-- Error muncul tanpa mendorong -->
       <p v-if="endError" class="absolute text-red-500 text-sm left-3 -bottom-6">
         {{ endError }}
       </p>
     </div>
 
-    <!-- =============================================== -->
-    <!-- BOTTOM SHEET ala GOJEK -->
-    <!-- =============================================== -->
     <div
       v-if="activePanel"
       class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[425px] h-full bg-black/40 flex justify-center items-end z-50"
@@ -358,7 +314,6 @@ const goToMap = async () => {
         class="w-full max-w-[425px] bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.2)] rounded-t-2xl p-5 transition-all duration-200 fixed bottom-0 left-1/2 -translate-x-1/2"
         :style="{ height: panelHeight }"
       >
-        <!-- DRAG HANDLE -->
         <div
           class="w-14 h-1.5 bg-gray-500 rounded-full mx-auto mb-4"
           @touchstart="startDrag"
@@ -366,21 +321,15 @@ const goToMap = async () => {
           @touchend="endDrag"
         ></div>
 
-        <!-- SEARCH INPUT -->
         <div class="flex items-center mb-4">
           <Icon
             icon="mdi:arrow-left"
             width="24"
-            class="text-[#959595] mr-3"
-            @click="
-              () => {
-                activePanel = false;
-                suggestions = [];
-              }
-            "
+            class="text-[#959595] mr-3 cursor-pointer"
+            @click="activePanel = false"
           />
           <input
-            class="flex-1 bg-white shadow-md rounded-full px-4 py-3 text-[#959595] focus:outline-none font-poppins"
+            class="flex-1 bg-white shadow-md rounded-full px-4 py-3 text-[#4c4a4a] focus:outline-none font-poppins"
             :placeholder="
               panelMode === 'start' ? 'Cari Lokasi awal...' : 'Cari Tujuan...'
             "
@@ -388,19 +337,17 @@ const goToMap = async () => {
           />
         </div>
 
-        <!-- RESULT LIST -->
-        <div class="overflow-y-auto h-full no-scrollbar">
+        <div class="overflow-y-auto h-[calc(100%-120px)] no-scrollbar">
           <div v-if="suggestions.length">
             <div
               v-for="item in suggestions"
               :key="item.name"
-              class="p-3 border-b text-[#cdc8c8] cursor-pointer"
+              class="p-3 border-b hover:bg-gray-50 cursor-pointer"
               @click="pickSuggestion(item)"
             >
-              <div class="text-[#4c4a4a]">{{ item.name }}</div>
+              <div class="text-[#4c4a4a] text-sm">{{ item.name }}</div>
             </div>
           </div>
-
           <div v-else class="text-[#959595] text-center mt-5">
             Ketik untuk mencari lokasi...
           </div>
@@ -410,7 +357,7 @@ const goToMap = async () => {
 
     <div
       v-if="!activePanel"
-      class="fixed bottom-15 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-50 flex justify-center"
+      class="fixed bottom-10 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-40 flex justify-center"
     >
       <ButtonPrimary
         @click="goToMap"
@@ -422,3 +369,13 @@ const goToMap = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+</style>
