@@ -26,7 +26,7 @@ const cianjurCoords = [107.1422, -6.812];
 
 // API Keys
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
-const apiBaseUrl = import.meta.env.VITE_API_URL;
+const apiBaseUrl = import.meta.env.VITE_API_NGROK;
 
 const goToCariRute = () => {
   router.push("/carirute");

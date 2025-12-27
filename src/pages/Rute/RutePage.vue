@@ -6,7 +6,7 @@ import * as maptilersdk from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 
 const searchQuery = ref("");
-const apiBaseUrl = import.meta.env.VITE_API_URL;
+const apiBaseUrl = import.meta.env.VITE_API_NGROK;
 const apiKey = import.meta.env.VITE_MAPTILER_API_KEY;
 
 // === STATE DATA ===
