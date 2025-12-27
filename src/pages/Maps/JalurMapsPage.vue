@@ -199,7 +199,6 @@ const loadRecommendedRoutes = async () => {
   if (!isExpired && !dataToRender && rawData) {
     try {
       let decoded = decodeURIComponent(rawData);
-      decoded = decodeURIComponent(decoded);
       dataToRender = JSON.parse(decoded);
     } catch (e) {
       console.error("Error decoding URL data:", e);
