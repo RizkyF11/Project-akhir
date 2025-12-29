@@ -22,7 +22,12 @@ const detailMap = ref(null); // Instance peta
 // 1. Fetch Data List Angkot (Halaman Utama)
 onMounted(async () => {
   try {
-    const response = await fetch(`${apiBaseUrl}/angkot`);
+    const response = await fetch(`${apiBaseUrl}/angkot`, {
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Accept": "application/json"
+      }
+    });
     const result = await response.json();
 
     if (result.status === "success") {
@@ -80,7 +85,12 @@ const openModal = async (summaryRoute) => {
   showModal.value = true;
 
   try {
-    const response = await fetch(`${apiBaseUrl}/angkot/${summaryRoute.id}`);
+    const response = await fetch(`${apiBaseUrl}/angkot/${summaryRoute.id}`, {
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Accept": "application/json"
+      }
+    });
     const result = await response.json();
 
     if (result.status === "success") {

@@ -15,6 +15,7 @@ const CACHE_DURATION_MS = 5 * 60 * 60 * 1000;
 
 const router = useRouter();
 
+const isLoading = ref(false); // State Loading Utama
 const startError = ref("");
 const endError = ref("");
 const startLocation = ref("");
@@ -66,20 +67,17 @@ watch(activePanel, (val) => {
 // REVERSE GEOCODING (MAPTILER + OSM FALLBACK)
 // ================================
 
-// 1. Fungsi Cadangan: OpenStreetMap (Nominatim)
 const reverseGeocodeOSM = async (lng, lat) => {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
   try {
     const res = await fetch(url, {
       headers: {
-        // Ganti dengan email/nama project Anda agar tidak kena blokir
-        "User-Agent": "AngkotinApp/1.0 (project-angkotin@example.com)",
+        "User-Agent": "AngkotinApp/1.0",
       },
     });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.display_name) {
-      // Ambil 3 bagian pertama (Nama Jalan, Desa/Kel, Kec)
       return data.display_name.split(",").slice(0, 3).join(",");
     }
     return null;
@@ -89,7 +87,6 @@ const reverseGeocodeOSM = async (lng, lat) => {
   }
 };
 
-// 2. Fungsi Utama: MapTiler dengan Fallback
 const reverseGeocode = async (lng, lat) => {
   const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${apiKey}`;
   try {
@@ -100,23 +97,17 @@ const reverseGeocode = async (lng, lat) => {
     const hasData = data.features && data.features.length > 0;
     const firstFeature = hasData ? data.features[0].place_name : "";
 
-    // JIKA MAPTILER GAGAL / UNKNOWN, GUNAKAN OSM
     if (!hasData || firstFeature.toLowerCase().includes("unknown")) {
-      console.log("MapTiler minim data, mencoba OSM...");
       const osmResult = await reverseGeocodeOSM(lng, lat);
       if (osmResult) return osmResult;
     }
 
-    // Prioritaskan POI dari MapTiler jika ada
     const poi = data.features?.find((f) =>
       (f.place_type ?? []).includes("poi")
     );
     return poi?.place_name || firstFeature || "Lokasi tidak diketahui";
   } catch (e) {
-    console.error("Reverse geocode error, trying OSM:", e);
-    return (
-      (await reverseGeocodeOSM(lng, lat)) || "Lokasi Terdeteksi (Gunakan Pin)"
-    );
+    return (await reverseGeocodeOSM(lng, lat)) || "Lokasi Terdeteksi";
   }
 };
 
@@ -135,7 +126,6 @@ const getMyLocation = () => {
     async (pos) => {
       const { latitude, longitude } = pos.coords;
       startCoords.value = [longitude, latitude];
-
       const place = await reverseGeocode(longitude, latitude);
       startLocation.value = place;
     },
@@ -164,22 +154,12 @@ const fetchGeocode = async (query) => {
   try {
     const res = await fetch(url);
     const data = await res.json();
-    const distanceToCianjur = (coords) => {
-      const [lng, lat] = coords;
-      return Math.sqrt(
-        Math.pow(lng - 107.139038, 2) + Math.pow(lat + 6.817977, 2)
-      );
-    };
 
     suggestions.value =
-      data.features
-        ?.map((item) => ({
-          name: item.place_name,
-          coords: item.geometry.coordinates,
-        }))
-        .sort(
-          (a, b) => distanceToCianjur(a.coords) - distanceToCianjur(b.coords)
-        ) || [];
+      data.features?.map((item) => ({
+        name: item.place_name,
+        coords: item.geometry.coordinates,
+      })) || [];
   } catch {
     suggestions.value = [];
   }
@@ -212,6 +192,8 @@ const goToMap = async () => {
   const [startLng, startLat] = startCoords.value;
   const [endLng, endLat] = endCoords.value;
 
+  isLoading.value = true; // Aktifkan Loading
+
   try {
     const response = await getRekomendasiAngkot(
       startLat,
@@ -237,6 +219,8 @@ const goToMap = async () => {
   } catch (err) {
     console.error(err);
     alert("Gagal memuat rekomendasi angkot");
+  } finally {
+    isLoading.value = false; // Matikan Loading
   }
 };
 
@@ -247,7 +231,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-screen">
+  <div class="flex flex-col h-screen overflow-hidden">
     <Header />
 
     <div class="mb-3 mt-10 relative w-[90%] mx-auto">
@@ -315,7 +299,7 @@ onMounted(() => {
         :style="{ height: panelHeight }"
       >
         <div
-          class="w-14 h-1.5 bg-gray-500 rounded-full mx-auto mb-4"
+          class="w-14 h-1.5 bg-gray-300 rounded-full mx-auto mb-4"
           @touchstart="startDrag"
           @touchmove="onDrag"
           @touchend="endDrag"
@@ -359,14 +343,34 @@ onMounted(() => {
       v-if="!activePanel"
       class="fixed bottom-10 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-40 flex justify-center"
     >
-      <ButtonPrimary
-        @click="goToMap"
-        size="medium"
-        class="font-poppins w-[83%]"
+      <ButtonPrimary @click="goToMap" size="medium" class="font-poppins w-[83%]"
+        >Cari Rute Angkot</ButtonPrimary
       >
-        Cari Rute Angkot
-      </ButtonPrimary>
     </div>
+
+    <Transition name="fade">
+      <div
+        v-if="isLoading"
+        class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm"
+      >
+        <div class="relative flex items-center justify-center">
+          <div class="w-16 h-16 border-4 border-gray-100 rounded-full"></div>
+          <div
+            class="absolute w-16 h-16 border-4 border-t-[#72BD43] border-transparent rounded-full animate-spin"
+          ></div>
+          <Icon
+            icon="mdi:bus-side"
+            class="absolute text-[#72BD43]"
+            width="24"
+          />
+        </div>
+        <p
+          class="mt-4 font-poppins text-sm font-semibold text-gray-700 animate-pulse"
+        >
+          Mencari rute terbaik...
+        </p>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -377,5 +381,27 @@ onMounted(() => {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ANIMASI LOADING */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 0.8s linear infinite;
 }
 </style>
