@@ -51,17 +51,17 @@ const fares = computed(() => {
 });
 
 // Drag Logic area
-const PARTIAL_OFFSET = 450; // Pixels to hide initially (hides fare section)
+// Drag Logic area
+const PARTIAL_OFFSET = 450;
 const startY = ref(0);
 const startTranslateY = ref(0);
-const currentTranslateY = ref(PARTIAL_OFFSET); // Start at partial
+const currentTranslateY = ref(PARTIAL_OFFSET);
 const isDragging = ref(false);
-const panelRef = ref(null);
 
 const handleStart = (e) => {
   isDragging.value = true;
   startY.value = e.type.includes("mouse") ? e.clientY : e.touches[0].clientY;
-  startTranslateY.value = currentTranslateY.value; // Record where we started
+  startTranslateY.value = currentTranslateY.value;
 };
 
 const handleMove = (e) => {
@@ -69,32 +69,22 @@ const handleMove = (e) => {
   const clientY = e.type.includes("mouse") ? e.clientY : e.touches[0].clientY;
   const deltaY = clientY - startY.value;
 
-  // Calculate new position based on start position + delta
   let newY = startTranslateY.value + deltaY;
 
-  // Limit dragging up (minY = 0 -> Full open)
-  if (newY < 0) newY = 0; // Elasticity could be added here
+  // Clamp: Panel hanya boleh bergerak antara 0 dan PARTIAL_OFFSET
+  if (newY < 0) newY = 0;
+  if (newY > PARTIAL_OFFSET) newY = PARTIAL_OFFSET;
 
   currentTranslateY.value = newY;
 };
 
 const handleEnd = () => {
   isDragging.value = false;
-
-  // Snap Logic
-  if (currentTranslateY.value > PARTIAL_OFFSET + 100) {
-    // If dragged way down below partial -> Close
-    emit("close");
-    // Reset to partial for next open (optional, depends on UX preference)
-    setTimeout(() => {
-      currentTranslateY.value = PARTIAL_OFFSET;
-    }, 300);
-  } else if (currentTranslateY.value > PARTIAL_OFFSET / 2) {
-    // Closer to partial -> Snap to Partial
-    currentTranslateY.value = PARTIAL_OFFSET;
-  } else {
-    // Closer to top -> Snap to Full
+  // Snap ke posisi terdekat
+  if (currentTranslateY.value < PARTIAL_OFFSET / 2) {
     currentTranslateY.value = 0;
+  } else {
+    currentTranslateY.value = PARTIAL_OFFSET;
   }
 };
 
