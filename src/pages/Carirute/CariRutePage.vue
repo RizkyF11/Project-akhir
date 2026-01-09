@@ -23,45 +23,22 @@ const startCoords = ref([null, null]); // [lng, lat]
 const endLocation = ref("");
 const endCoords = ref([null, null]); // [lng, lat]
 
-const panelMode = ref("start"); // "start" atau "end"
-const activePanel = ref(false);
+const activeField = ref(null); // "start" atau "end"
 const suggestions = ref([]);
+const isSearching = ref(false);
+const isLocating = ref(false);
 
 // Batas wilayah Cianjur (bounding box)
 const CIANJUR_BBOX = "106.83,-7.55,107.45,-6.71";
 
-// ================================
-// BOTTOM SHEET LOGIC
-// ================================
-const panelHeight = ref("50%");
-const startY = ref(0);
-const currentHeight = ref(0);
-const snapPoints = [0.25, 0.5, 0.75];
-
-const startDrag = (e) => {
-  startY.value = e.touches[0].clientY;
-  currentHeight.value = parseInt(panelHeight.value);
+// Debounce helper
+const debounce = (fn, delay) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), delay);
+  };
 };
-
-const onDrag = (e) => {
-  const delta = startY.value - e.touches[0].clientY;
-  const vh = window.innerHeight;
-  const percent = (((currentHeight.value * vh) / 100 + delta) / vh) * 100;
-  const clamped = Math.min(Math.max(percent, 20), 90);
-  panelHeight.value = `${clamped}%`;
-};
-
-const endDrag = () => {
-  const percent = parseInt(panelHeight.value);
-  let closest = snapPoints.reduce((a, b) =>
-    Math.abs(b * 100 - percent) < Math.abs(a * 100 - percent) ? b : a
-  );
-  panelHeight.value = `${closest * 100}%`;
-};
-
-watch(activePanel, (val) => {
-  document.body.style.overflow = val ? "hidden" : "auto";
-});
 
 // ================================
 // REVERSE GEOCODING (MAPTILER + OSM FALLBACK)
@@ -114,24 +91,28 @@ const reverseGeocode = async (lng, lat) => {
 // ================================
 // GPS & SEARCH LOGIC
 // ================================
-const getMyLocation = () => {
+const getMyLocation = (manual = false) => {
   if (!navigator.geolocation) {
     alert("Browser Anda tidak mendukung GPS");
     return;
   }
 
-  startLocation.value = "Mencari alamat...";
+  isLocating.value = true;
 
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
-      startCoords.value = [longitude, latitude];
-      const place = await reverseGeocode(longitude, latitude);
-      startLocation.value = place;
+      // Only update if manual request or field is empty
+      if (manual || !startLocation.value) {
+        startCoords.value = [longitude, latitude];
+        const place = await reverseGeocode(longitude, latitude);
+        startLocation.value = place;
+      }
+      isLocating.value = false;
     },
     () => {
-      startLocation.value = "";
-      alert("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
+      isLocating.value = false;
+      if (manual) alert("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
     },
     { enableHighAccuracy: true }
   );
@@ -142,14 +123,24 @@ const fetchGeocode = async (query) => {
     suggestions.value = [];
     return;
   }
+
+  isSearching.value = true;
   let q = query.trim();
+
+  // Improve accuracy: prioritize Cianjur if not specified
   if (q.split(" ").length <= 2 && !q.toLowerCase().includes("cianjur")) {
     q = `${q} cianjur`;
   }
 
+  // Add proximity if we have user location and searching for destination
+  let proximity = "";
+  if (activeField.value === "end" && startCoords.value[0]) {
+    proximity = `&proximity=${startCoords.value[0]},${startCoords.value[1]}`;
+  }
+
   const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
     q
-  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatch=true&autocomplete=true&types=poi,address,street,place`;
+  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatch=true&autocomplete=true&types=poi,address,street,place${proximity}`;
 
   try {
     const res = await fetch(url);
@@ -157,23 +148,63 @@ const fetchGeocode = async (query) => {
 
     suggestions.value =
       data.features?.map((item) => ({
-        name: item.place_name,
+        name: item.text, // Main name (e.g. "Gang Pataruman")
+        address: item.place_name.replace(item.text + ", ", ""), // Full address minus name
         coords: item.geometry.coordinates,
       })) || [];
   } catch {
     suggestions.value = [];
+  } finally {
+    isSearching.value = false;
   }
 };
 
+const debouncedSearch = debounce((query) => {
+  fetchGeocode(query);
+}, 300);
+
+const handleInput = (e) => {
+  const val = e.target.value;
+  if (activeField.value === "start") {
+    startLocation.value = val;
+  } else {
+    endLocation.value = val;
+  }
+  debouncedSearch(val);
+};
+
+const highlightMatch = (text) => {
+  const query =
+    activeField.value === "start" ? startLocation.value : endLocation.value;
+  if (!query || !text) return text;
+  // Remove " cianjur" if we added it for search but user didn't type it
+  const cleanQuery = query.replace(/ cianjur$/i, "").trim();
+  if (!cleanQuery) return text;
+
+  const regex = new RegExp(`(${cleanQuery})`, "gi");
+  return text.replace(regex, "<b>$1</b>");
+};
+
 const pickSuggestion = (item) => {
-  if (panelMode.value === "start") {
-    startLocation.value = item.name;
+  if (activeField.value === "start") {
+    startLocation.value = item.name; // Use the shorter name or full place_name as desired
     startCoords.value = item.coords;
+    console.log("Selected Start Location:", item.name, item.coords);
   } else {
     endLocation.value = item.name;
     endCoords.value = item.coords;
+    console.log("Selected End Location:", item.name, item.coords);
   }
-  activePanel.value = false;
+  suggestions.value = [];
+  activeField.value = null;
+};
+
+const setField = (field) => {
+  activeField.value = field;
+  // Trigger search immediately with current value if exists
+  const currentVal =
+    field === "start" ? startLocation.value : endLocation.value;
+  if (currentVal) fetchGeocode(currentVal);
 };
 
 // ================================
@@ -226,7 +257,7 @@ const goToMap = async () => {
 
 onMounted(() => {
   const izin = confirm("Aktifkan lokasi untuk mendeteksi lokasi anda?");
-  if (izin) getMyLocation();
+  if (izin) getMyLocation(false);
 });
 </script>
 
@@ -238,21 +269,19 @@ onMounted(() => {
       <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
         <Icon
           icon="mdi:my-location"
-          class="text-[#959595] mr-2"
+          class="text-[#959595] mr-2 cursor-pointer"
           width="24"
           height="24"
+          @click="getMyLocation(true)"
         />
         <input
-          v-model="startLocation"
-          readonly
-          @click="
-            () => {
-              panelMode = 'start';
-              activePanel = true;
-            }
+          :value="startLocation"
+          @input="handleInput"
+          @focus="setField('start')"
+          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          :placeholder="
+            isLocating ? 'Mencari alamat...' : 'Lokasi Saya Saat Ini'
           "
-          class="flex-1 bg-transparent text-[#4c4a4a] focus:outline-none font-poppins cursor-pointer"
-          placeholder="Pilih Lokasi Awal"
         />
       </div>
       <p
@@ -263,25 +292,20 @@ onMounted(() => {
       </p>
     </div>
 
-    <div class="mb-10 mt-5 relative w-[90%] mx-auto">
+    <div class="mb-4 mt-5 relative w-[90%] mx-auto">
       <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
         <Icon
-          icon="mdi:location"
+          icon="mdi:magnify"
           class="text-[#959595] mr-2"
           width="24"
           height="24"
         />
         <input
-          v-model="endLocation"
-          readonly
-          @click="
-            () => {
-              panelMode = 'end';
-              activePanel = true;
-            }
-          "
-          class="flex-1 bg-transparent text-[#4c4a4a] focus:outline-none font-poppins cursor-pointer"
-          placeholder="Pilih Tujuan"
+          :value="endLocation"
+          @input="handleInput"
+          @focus="setField('end')"
+          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          placeholder="Tujuan Akhir"
         />
       </div>
       <p v-if="endError" class="absolute text-red-500 text-sm left-3 -bottom-6">
@@ -289,58 +313,58 @@ onMounted(() => {
       </p>
     </div>
 
+    <!-- Pilih Lewat Maps Button -->
+    <div class="w-[90%] mx-auto mb-4">
+      <button
+        class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100 text-sm font-poppins text-gray-600 hover:bg-gray-50 transition-colors"
+      >
+        <Icon icon="mdi:map-marker-radius" class="text-green-500" width="20" />
+        Pilih Lewat Maps
+      </button>
+    </div>
+
+    <!-- Search Results List -->
     <div
-      v-if="activePanel"
-      class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[425px] h-full bg-black/40 flex justify-center items-end z-50"
-      @click.self="activePanel = false"
+      v-if="activeField && suggestions.length > 0"
+      class="flex-1 overflow-y-auto w-full px-5 pb-20 no-scrollbar mb-24"
     >
       <div
-        class="w-full max-w-[425px] bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.2)] rounded-t-2xl p-5 transition-all duration-200 fixed bottom-0 left-1/2 -translate-x-1/2"
-        :style="{ height: panelHeight }"
+        class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
       >
         <div
-          class="w-14 h-1.5 bg-gray-300 rounded-full mx-auto mb-4"
-          @touchstart="startDrag"
-          @touchmove="onDrag"
-          @touchend="endDrag"
-        ></div>
-
-        <div class="flex items-center mb-4">
-          <Icon
-            icon="mdi:arrow-left"
-            width="24"
-            class="text-[#959595] mr-3 cursor-pointer"
-            @click="activePanel = false"
-          />
-          <input
-            class="flex-1 bg-white shadow-md rounded-full px-4 py-3 text-[#4c4a4a] focus:outline-none font-poppins"
-            :placeholder="
-              panelMode === 'start' ? 'Cari Lokasi awal...' : 'Cari Tujuan...'
-            "
-            @input="fetchGeocode($event.target.value)"
-          />
-        </div>
-
-        <div class="overflow-y-auto h-[calc(100%-120px)] no-scrollbar">
-          <div v-if="suggestions.length">
-            <div
-              v-for="item in suggestions"
-              :key="item.name"
-              class="p-3 border-b hover:bg-gray-50 cursor-pointer"
-              @click="pickSuggestion(item)"
-            >
-              <div class="text-[#4c4a4a] text-sm">{{ item.name }}</div>
-            </div>
+          v-for="(item, index) in suggestions"
+          :key="index"
+          class="p-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer flex items-start gap-3"
+          @click="pickSuggestion(item)"
+        >
+          <div class="mt-1 bg-gray-100 p-2 rounded-full">
+            <Icon
+              icon="mdi:map-marker-outline"
+              class="text-gray-600"
+              width="20"
+            />
           </div>
-          <div v-else class="text-[#959595] text-center mt-5">
-            Ketik untuk mencari lokasi...
+          <div>
+            <div
+              class="text-[#4c4a4a] font-medium text-sm font-poppins"
+              v-html="highlightMatch(item.name)"
+            ></div>
+            <div
+              class="text-gray-400 text-xs font-poppins mt-0.5 truncate max-w-[250px]"
+            >
+              {{ item.address }}
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Bottom Button (Only show if not searching or if we want it always visible but maybe hidden by keyboard) -->
+    <!-- The user said "bottom panel nya dihilangkan jadi diganti dengan hasil pencarian". 
+         But also "Cari Rute Angkot" button is in the image. 
+         I will keep the button fixed at bottom but maybe hide it if the list is long? 
+         The image shows the button at the bottom. -->
     <div
-      v-if="!activePanel"
       class="fixed bottom-10 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-40 flex justify-center"
     >
       <ButtonPrimary @click="goToMap" size="medium" class="font-poppins w-[83%]"
