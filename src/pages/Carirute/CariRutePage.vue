@@ -1,7 +1,7 @@
 <script setup>
 import { Icon } from "@iconify/vue";
 import Header from "../../components/Header.vue";
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import ButtonPrimary from "../../components/ButtonPrimary.vue";
 import { useRouter } from "vue-router";
 import { getRekomendasiAngkot } from "../../services/angkotService";
@@ -15,7 +15,7 @@ const CACHE_DURATION_MS = 5 * 60 * 60 * 1000;
 
 const router = useRouter();
 
-const isLoading = ref(false); // State Loading Utama
+const isLoading = ref(false);
 const startError = ref("");
 const endError = ref("");
 const startLocation = ref("");
@@ -28,10 +28,8 @@ const suggestions = ref([]);
 const isSearching = ref(false);
 const isLocating = ref(false);
 
-// Batas wilayah Cianjur (bounding box)
 const CIANJUR_BBOX = "106.83,-7.55,107.45,-6.71";
 
-// Debounce helper
 const debounce = (fn, delay) => {
   let timeout;
   return (...args) => {
@@ -41,25 +39,55 @@ const debounce = (fn, delay) => {
 };
 
 // ================================
-// REVERSE GEOCODING (MAPTILER + OSM FALLBACK)
+// LOGIKA "PILIH LEWAT MAPS"
+// ================================
+
+const openMapPicker = () => {
+  // Jika user tidak sedang fokus ke input tertentu, default ke 'start'
+  const mode = activeField.value || "start";
+  router.push({
+    path: "/pilih-lokasi",
+    query: { mode: mode },
+  });
+};
+
+const checkReturnedLocation = () => {
+  const saved = localStorage.getItem("selected_map_location");
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      if (data.mode === "start") {
+        startLocation.value = data.name;
+        startCoords.value = data.coords;
+        startError.value = "";
+      } else {
+        endLocation.value = data.name;
+        endCoords.value = data.coords;
+        endError.value = "";
+      }
+      // Hapus agar tidak terpicu lagi saat refresh
+      localStorage.removeItem("selected_map_location");
+    } catch (e) {
+      console.error("Error parsing location data", e);
+    }
+  }
+};
+
+// ================================
+// GEOCODING & SEARCH LOGIC
 // ================================
 
 const reverseGeocodeOSM = async (lng, lat) => {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": "AngkotinApp/1.0",
-      },
+      headers: { "User-Agent": "AngkotinApp/1.0" },
     });
-    if (!res.ok) return null;
     const data = await res.json();
-    if (data.display_name) {
-      return data.display_name.split(",").slice(0, 3).join(",");
-    }
-    return null;
+    return data.display_name
+      ? data.display_name.split(",").slice(0, 3).join(",")
+      : null;
   } catch (e) {
-    console.error("OSM Fallback error:", e);
     return null;
   }
 };
@@ -68,51 +96,30 @@ const reverseGeocode = async (lng, lat) => {
   const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${apiKey}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error("MapTiler error");
-
     const data = await res.json();
     const hasData = data.features && data.features.length > 0;
     const firstFeature = hasData ? data.features[0].place_name : "";
-
     if (!hasData || firstFeature.toLowerCase().includes("unknown")) {
-      const osmResult = await reverseGeocodeOSM(lng, lat);
-      if (osmResult) return osmResult;
+      return (await reverseGeocodeOSM(lng, lat)) || "Lokasi tidak diketahui";
     }
-
-    const poi = data.features?.find((f) =>
-      (f.place_type ?? []).includes("poi")
-    );
-    return poi?.place_name || firstFeature || "Lokasi tidak diketahui";
+    return firstFeature;
   } catch (e) {
-    return (await reverseGeocodeOSM(lng, lat)) || "Lokasi Terdeteksi";
+    return "Lokasi Terdeteksi";
   }
 };
 
-// ================================
-// GPS & SEARCH LOGIC
-// ================================
 const getMyLocation = (manual = false) => {
-  if (!navigator.geolocation) {
-    alert("Browser Anda tidak mendukung GPS");
-    return;
-  }
-
+  if (!navigator.geolocation) return;
   isLocating.value = true;
-
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
-      // Only update if manual request or field is empty
-      if (manual || !startLocation.value) {
-        startCoords.value = [longitude, latitude];
-        const place = await reverseGeocode(longitude, latitude);
-        startLocation.value = place;
-      }
+      startCoords.value = [longitude, latitude];
+      startLocation.value = await reverseGeocode(longitude, latitude);
       isLocating.value = false;
     },
     () => {
       isLocating.value = false;
-      if (manual) alert("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
     },
     { enableHighAccuracy: true }
   );
@@ -123,33 +130,21 @@ const fetchGeocode = async (query) => {
     suggestions.value = [];
     return;
   }
-
   isSearching.value = true;
   let q = query.trim();
-
-  // Improve accuracy: prioritize Cianjur if not specified
-  if (q.split(" ").length <= 2 && !q.toLowerCase().includes("cianjur")) {
-    q = `${q} cianjur`;
-  }
-
-  // Add proximity if we have user location and searching for destination
-  let proximity = "";
-  if (activeField.value === "end" && startCoords.value[0]) {
-    proximity = `&proximity=${startCoords.value[0]},${startCoords.value[1]}`;
-  }
+  if (!q.toLowerCase().includes("cianjur")) q = `${q} cianjur`;
 
   const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
     q
-  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&fuzzyMatch=true&autocomplete=true&types=poi,address,street,place${proximity}`;
+  )}.json?key=${apiKey}&country=ID&bbox=${CIANJUR_BBOX}&types=poi,address,street,place`;
 
   try {
     const res = await fetch(url);
     const data = await res.json();
-
     suggestions.value =
       data.features?.map((item) => ({
-        name: item.text, // Main name (e.g. "Gang Pataruman")
-        address: item.place_name.replace(item.text + ", ", ""), // Full address minus name
+        name: item.text,
+        address: item.place_name,
         coords: item.geometry.coordinates,
       })) || [];
   } catch {
@@ -159,41 +154,22 @@ const fetchGeocode = async (query) => {
   }
 };
 
-const debouncedSearch = debounce((query) => {
-  fetchGeocode(query);
-}, 300);
+const debouncedSearch = debounce((query) => fetchGeocode(query), 300);
 
 const handleInput = (e) => {
   const val = e.target.value;
-  if (activeField.value === "start") {
-    startLocation.value = val;
-  } else {
-    endLocation.value = val;
-  }
+  if (activeField.value === "start") startLocation.value = val;
+  else endLocation.value = val;
   debouncedSearch(val);
-};
-
-const highlightMatch = (text) => {
-  const query =
-    activeField.value === "start" ? startLocation.value : endLocation.value;
-  if (!query || !text) return text;
-  // Remove " cianjur" if we added it for search but user didn't type it
-  const cleanQuery = query.replace(/ cianjur$/i, "").trim();
-  if (!cleanQuery) return text;
-
-  const regex = new RegExp(`(${cleanQuery})`, "gi");
-  return text.replace(regex, "<b>$1</b>");
 };
 
 const pickSuggestion = (item) => {
   if (activeField.value === "start") {
-    startLocation.value = item.name; // Use the shorter name or full place_name as desired
+    startLocation.value = item.name;
     startCoords.value = item.coords;
-    console.log("Selected Start Location:", item.name, item.coords);
   } else {
     endLocation.value = item.name;
     endCoords.value = item.coords;
-    console.log("Selected End Location:", item.name, item.coords);
   }
   suggestions.value = [];
   activeField.value = null;
@@ -201,43 +177,33 @@ const pickSuggestion = (item) => {
 
 const setField = (field) => {
   activeField.value = field;
-  // Trigger search immediately with current value if exists
-  const currentVal =
-    field === "start" ? startLocation.value : endLocation.value;
-  if (currentVal) fetchGeocode(currentVal);
 };
 
-// ================================
-// NAVIGATION & CACHE
-// ================================
 const goToMap = async () => {
   startError.value = startLocation.value ? "" : "Lokasi awal wajib diisi";
   endError.value = endLocation.value ? "" : "Tujuan wajib diisi";
 
   if (!startLocation.value || !endLocation.value) return;
   if (!startCoords.value[0] || !endCoords.value[0]) {
-    alert("Lokasi belum dipilih dengan benar dari daftar");
+    alert("Pilih lokasi dari daftar atau peta");
     return;
   }
 
-  const [startLng, startLat] = startCoords.value;
-  const [endLng, endLat] = endCoords.value;
-
-  isLoading.value = true; // Aktifkan Loading
-
+  isLoading.value = true;
   try {
+    const [startLng, startLat] = startCoords.value;
+    const [endLng, endLat] = endCoords.value;
     const response = await getRekomendasiAngkot(
       startLat,
       startLng,
       endLat,
       endLng
     );
-    const dataToStore = { timestamp: Date.now(), data: response.data };
 
-    localStorage.setItem(CACHE_KEY, JSON.stringify(dataToStore));
-    localStorage.setItem("startLocationName", startLocation.value);
-    localStorage.setItem("endLocationName", endLocation.value);
-
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ timestamp: Date.now(), data: response.data })
+    );
     router.push({
       path: "/jalurmaps",
       query: {
@@ -248,37 +214,47 @@ const goToMap = async () => {
       },
     });
   } catch (err) {
-    console.error(err);
-    alert("Gagal memuat rekomendasi angkot");
+    alert("Gagal memuat rute");
   } finally {
-    isLoading.value = false; // Matikan Loading
+    isLoading.value = false;
   }
 };
 
 onMounted(() => {
+  // Cek apakah ada lokasi yang terpilih dari halaman peta
+  checkReturnedLocation();
+
+  // Event listener jika user pindah tab lalu balik lagi
+  window.addEventListener("focus", checkReturnedLocation);
+
   const izin = confirm("Aktifkan lokasi untuk mendeteksi lokasi anda?");
   if (izin) getMyLocation(false);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("focus", checkReturnedLocation);
 });
 </script>
 
 <template>
-  <div class="flex flex-col h-screen overflow-hidden">
+  <div class="flex flex-col h-screen overflow-hidden bg-gray-50">
     <Header />
 
     <div class="mb-3 mt-10 relative w-[90%] mx-auto">
-      <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
+      <div
+        class="bg-white rounded-full shadow-md flex items-center px-4 py-3 border border-transparent focus-within:border-[#72BD43] transition-all"
+      >
         <Icon
           icon="mdi:my-location"
-          class="text-[#959595] mr-2 cursor-pointer"
+          class="text-[#959595] mr-2 cursor-pointer hover:text-[#72BD43]"
           width="24"
-          height="24"
           @click="getMyLocation(true)"
         />
         <input
           :value="startLocation"
           @input="handleInput"
           @focus="setField('start')"
-          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          class="flex-1 bg-transparent text-gray-700 focus:outline-none font-poppins text-sm"
           :placeholder="
             isLocating ? 'Mencari alamat...' : 'Lokasi Saya Saat Ini'
           "
@@ -286,72 +262,66 @@ onMounted(() => {
       </div>
       <p
         v-if="startError"
-        class="absolute text-red-500 text-sm left-3 -bottom-6"
+        class="absolute text-red-500 text-[10px] left-4 -bottom-5 font-poppins uppercase tracking-wider"
       >
         {{ startError }}
       </p>
     </div>
 
     <div class="mb-4 mt-5 relative w-[90%] mx-auto">
-      <div class="bg-white rounded-full shadow-md flex items-center px-4 py-3">
-        <Icon
-          icon="mdi:magnify"
-          class="text-[#959595] mr-2"
-          width="24"
-          height="24"
-        />
+      <div
+        class="bg-white rounded-full shadow-md flex items-center px-4 py-3 border border-transparent focus-within:border-[#72BD43] transition-all"
+      >
+        <Icon icon="mdi:magnify" class="text-[#959595] mr-2" width="24" />
         <input
           :value="endLocation"
           @input="handleInput"
           @focus="setField('end')"
-          class="flex-1 bg-transparent text-[#959595] focus:outline-none font-poppins"
+          class="flex-1 bg-transparent text-gray-700 focus:outline-none font-poppins text-sm"
           placeholder="Tujuan Akhir"
         />
       </div>
-      <p v-if="endError" class="absolute text-red-500 text-sm left-3 -bottom-6">
+      <p
+        v-if="endError"
+        class="absolute text-red-500 text-[10px] left-4 -bottom-5 font-poppins uppercase tracking-wider"
+      >
         {{ endError }}
       </p>
     </div>
 
-    <!-- Pilih Lewat Maps Button -->
-    <div class="w-[90%] mx-auto mb-4">
+    <div class="w-[90%] mx-auto mb-4 flex justify-start">
       <button
-        class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100 text-sm font-poppins text-gray-600 hover:bg-gray-50 transition-colors"
+        @click="openMapPicker"
+        class="flex items-center gap-2 bg-white px-5 py-2.5 rounded-full shadow-sm border border-gray-100 text-xs font-poppins font-semibold text-gray-600 hover:bg-gray-50 active:scale-95 transition-all"
       >
-        <Icon icon="mdi:map-marker-radius" class="text-green-500" width="20" />
+        <Icon icon="mdi:map-marker-radius" class="text-[#72BD43]" width="18" />
         Pilih Lewat Maps
       </button>
     </div>
 
-    <!-- Search Results List -->
     <div
       v-if="activeField && suggestions.length > 0"
-      class="flex-1 overflow-y-auto w-full px-5 pb-20 no-scrollbar mb-24"
+      class="flex-1 overflow-y-auto w-full px-5 pb-32 no-scrollbar"
     >
       <div
-        class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+        class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
       >
         <div
           v-for="(item, index) in suggestions"
           :key="index"
-          class="p-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer flex items-start gap-3"
+          class="p-4 border-b border-gray-50 last:border-0 hover:bg-green-50/50 cursor-pointer flex items-start gap-3 transition-colors"
           @click="pickSuggestion(item)"
         >
-          <div class="mt-1 bg-gray-100 p-2 rounded-full">
-            <Icon
-              icon="mdi:map-marker-outline"
-              class="text-gray-600"
-              width="20"
-            />
+          <div class="mt-1 bg-gray-100 p-2 rounded-full text-gray-500">
+            <Icon icon="mdi:map-marker-outline" width="18" />
           </div>
-          <div>
+          <div class="flex-1 overflow-hidden">
             <div
-              class="text-[#4c4a4a] font-medium text-sm font-poppins"
-              v-html="highlightMatch(item.name)"
-            ></div>
-            <div
-              class="text-gray-400 text-xs font-poppins mt-0.5 truncate max-w-[250px]"
+              class="text-gray-800 font-semibold text-sm font-poppins truncate"
             >
+              {{ item.name }}
+            </div>
+            <div class="text-gray-400 text-[11px] font-poppins mt-0.5 truncate">
               {{ item.address }}
             </div>
           </div>
@@ -359,39 +329,36 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Bottom Button (Only show if not searching or if we want it always visible but maybe hidden by keyboard) -->
-    <!-- The user said "bottom panel nya dihilangkan jadi diganti dengan hasil pencarian". 
-         But also "Cari Rute Angkot" button is in the image. 
-         I will keep the button fixed at bottom but maybe hide it if the list is long? 
-         The image shows the button at the bottom. -->
-    <div
-      class="fixed bottom-10 left-1/2 transform -translate-x-1/2 w-full max-w-[425px] z-40 flex justify-center"
-    >
-      <ButtonPrimary @click="goToMap" size="medium" class="font-poppins w-[83%]"
-        >Cari Rute Angkot</ButtonPrimary
+    <div class="fixed bottom-10 left-0 w-full z-40 flex justify-center px-6">
+      <ButtonPrimary
+        @click="goToMap"
+        size="medium"
+        class="font-poppins w-full shadow-lg shadow-green-200"
       >
+        Cari Rute Angkot
+      </ButtonPrimary>
     </div>
 
     <Transition name="fade">
       <div
         v-if="isLoading"
-        class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md"
       >
         <div class="relative flex items-center justify-center">
-          <div class="w-16 h-16 border-4 border-gray-100 rounded-full"></div>
+          <div class="w-20 h-20 border-4 border-gray-100 rounded-full"></div>
           <div
-            class="absolute w-16 h-16 border-4 border-t-[#72BD43] border-transparent rounded-full animate-spin"
+            class="absolute w-20 h-20 border-4 border-t-[#72BD43] border-transparent rounded-full animate-spin"
           ></div>
           <Icon
             icon="mdi:bus-side"
             class="absolute text-[#72BD43]"
-            width="24"
+            width="32"
           />
         </div>
         <p
-          class="mt-4 font-poppins text-sm font-semibold text-gray-700 animate-pulse"
+          class="mt-6 font-poppins text-sm font-bold text-gray-800 animate-pulse tracking-wide"
         >
-          Mencari rute terbaik...
+          Mencari Rute Terbaik...
         </p>
       </div>
     </Transition>
@@ -407,10 +374,9 @@ onMounted(() => {
   scrollbar-width: none;
 }
 
-/* ANIMASI LOADING */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.4s ease;
 }
 .fade-enter-from,
 .fade-leave-to {
@@ -426,6 +392,6 @@ onMounted(() => {
   }
 }
 .animate-spin {
-  animation: spin 0.8s linear infinite;
+  animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 </style>

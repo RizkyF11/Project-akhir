@@ -4,6 +4,7 @@ import Homepage from '../pages/Home/HomePage.vue'
 import RutePage from '../pages/Rute/RutePage.vue'
 import JalurMapsPage from '../pages/Maps/JalurMapsPage.vue'
 import CariRutePage from '../pages/Carirute/CariRutePage.vue'
+import PilihLokasiMapPage from '../pages/PilihLokasi/PilihLokasiMapPage.vue'
 
 
 const routes = [
@@ -35,6 +36,11 @@ const routes = [
     path: '/carirute',
     name: 'CariRutePage',
     component: CariRutePage
+  },
+  {
+    path: '/pilih-lokasi',
+    name: 'PilihLokasiMapPage',
+    component: PilihLokasiMapPage
   }
 ]
 
