@@ -52,7 +52,7 @@ const fares = computed(() => {
 
 // Drag Logic area
 // Drag Logic area
-const PARTIAL_OFFSET = 390;
+const PARTIAL_OFFSET = 500;
 const startY = ref(0);
 const startTranslateY = ref(0);
 const currentTranslateY = ref(PARTIAL_OFFSET);

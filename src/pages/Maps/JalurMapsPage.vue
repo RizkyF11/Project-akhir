@@ -6,6 +6,9 @@ import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { useRouter, useRoute } from "vue-router";
 import { Icon } from "@iconify/vue";
 import RouteDetailPanel from "../../components/RouteDetailPanel.vue";
+import { calculateDistance } from "../../services/geo";
+// --- TAMBAHAN IMPORT ---
+import LocationAlert from "../../components/LocationAlert.vue";
 
 // router
 const router = useRouter();
@@ -28,6 +31,16 @@ const watchId = ref(null);
 const isFollowingUser = ref(false);
 const userHeading = ref(0);
 
+// --- TAMBAHAN STATE ALERT ---
+const alertConfig = ref({
+  show: false,
+  title: "",
+  message: "",
+  type: "info",
+});
+const hasNotifiedTransfer = ref(false);
+const hasNotifiedDestination = ref(false);
+
 // default lokasi cianjur
 const cianjurCoords = [107.1422, -6.812];
 
@@ -38,13 +51,61 @@ const goToCariRute = () => {
 };
 
 /* =====================================================
-      LOGIKA TRACKING LOKASI (GOOGLE MAPS STYLE)
+      LOGIKA TRACKING LOKASI & ALERT GEOFENCING
 ===================================================== */
+
+// --- TAMBAHAN FUNGSI CEK JARAK ---
+const checkAlertProximity = (lat, lng) => {
+  if (!routeResult.value) return;
+
+  const triggerDistance = 150; // Jarak pemicu alert (150 meter)
+
+  // 1. Cek Jarak ke Titik Transfer (Jika rute double)
+  if (routeResult.value.type === "double" && !hasNotifiedTransfer.value) {
+    const tLoc = routeResult.value.routes[1].transfer_point_on_b.coordinates;
+    const distToTransfer = calculateDistance(lat, lng, tLoc[1], tLoc[0]);
+
+    if (distToTransfer < triggerDistance) {
+      alertConfig.value = {
+        show: true,
+        title: "Siap-siap Turun!",
+        message: `Kamu sudah dekat lokasi transit. Jangan lupa bersiap pindah ke Angkot ${routeResult.value.routes[1].angkot.nama}.`,
+        type: "warning",
+      };
+      hasNotifiedTransfer.value = true;
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+  }
+
+  // 2. Cek Jarak ke Titik Tujuan
+  if (!hasNotifiedDestination.value) {
+    const { end_lat, end_lng } = route.query;
+    if (end_lat && end_lng) {
+      const distToTarget = calculateDistance(
+        lat,
+        lng,
+        parseFloat(end_lat),
+        parseFloat(end_lng)
+      );
+
+      if (distToTarget < triggerDistance) {
+        alertConfig.value = {
+          show: true,
+          title: "Hampir Sampai!",
+          message:
+            "Kamu sudah dekat dengan lokasi tujuan. Periksa kembali barang bawaanmu sebelum turun.",
+          type: "success",
+        };
+        hasNotifiedDestination.value = true;
+        if (navigator.vibrate) navigator.vibrate(500);
+      }
+    }
+  }
+};
 
 const startLocationTracking = () => {
   if (!navigator.geolocation) return;
 
-  // Membuat elemen custom untuk marker user
   const el = document.createElement("div");
   el.className = "user-location-container";
   el.innerHTML = `
@@ -57,8 +118,6 @@ const startLocationTracking = () => {
       const { longitude, latitude, heading } = pos.coords;
       const newPos = [longitude, latitude];
 
-      // Update Arah Panah (Heading)
-      // Jika heading null (user diam), gunakan nilai terakhir
       if (heading !== null) {
         userHeading.value = heading;
         const arrow = el.querySelector(".user-heading-arrow");
@@ -66,7 +125,6 @@ const startLocationTracking = () => {
           arrow.style.transform = `translateX(-50%) rotate(${heading}deg)`;
       }
 
-      // 1. Buat atau Update Marker
       if (!userMarker.value) {
         userMarker.value = new maptilersdk.Marker({ element: el })
           .setLngLat(newPos)
@@ -75,7 +133,9 @@ const startLocationTracking = () => {
         userMarker.value.setLngLat(newPos);
       }
 
-      // 2. Jika mode "Follow" aktif, gerakkan kamera
+      // --- INTEGRASI ALERT DI SINI ---
+      checkAlertProximity(latitude, longitude);
+
       if (isFollowingUser.value) {
         map.value.flyTo({
           center: newPos,
@@ -133,7 +193,11 @@ const drawPolyline = (coords, color = "#2ecc71", id = "route-line") => {
         type: "line",
         source: id,
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": color, "line-width": 6, "line-opacity": 0.8 },
+        paint: {
+          "line-color": color,
+          "line-width": 5,
+          "line-opacity": 0.85,
+        },
       },
       firstSymbolId
     );
@@ -148,18 +212,21 @@ const drawPolyline = (coords, color = "#2ecc71", id = "route-line") => {
         source: id,
         layout: {
           "symbol-placement": "line",
-          "symbol-spacing": 80,
+          "symbol-spacing": 60,
           "text-field": "▶",
-          "text-size": 10,
+          "text-size": 12,
           "text-rotation-alignment": "map",
+          "text-keep-upright": false,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
         },
         paint: {
           "text-color": color,
           "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
+          "text-halo-width": 1.5,
         },
       },
-      firstSymbolId
+      null
     );
   }
 };
@@ -256,7 +323,7 @@ onMounted(() => {
     });
 
     loadRecommendedRoutes();
-    startLocationTracking(); // Jalankan tracking saat map siap
+    startLocationTracking();
   });
 });
 
@@ -294,18 +361,25 @@ onUnmounted(() => {
         :route-data="routeResult"
         @close="isPanelVisible = false"
       />
+
+      <LocationAlert
+        :show="alertConfig.show"
+        :title="alertConfig.title"
+        :message="alertConfig.message"
+        :type="alertConfig.type"
+        @close="alertConfig.show = false"
+      />
     </div>
   </div>
 </template>
 
 <style>
-/* STYLE MARKER USER GOOGLE MAPS */
+/* ... seluruh CSS Anda tetap sama seperti sebelumnya ... */
 .user-location-container {
   position: relative;
   width: 24px;
   height: 24px;
 }
-
 .user-blue-dot {
   width: 16px;
   height: 16px;
@@ -319,8 +393,6 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
   z-index: 2;
 }
-
-/* Efek Berdenyut */
 .user-blue-dot::after {
   content: "";
   position: absolute;
@@ -333,8 +405,6 @@ onUnmounted(() => {
   z-index: -1;
   animation: pulse-user 2s infinite;
 }
-
-/* Panah Arah (Heading) */
 .user-heading-arrow {
   position: absolute;
   top: 50%;
@@ -345,11 +415,10 @@ onUnmounted(() => {
   border-right: 8px solid transparent;
   border-bottom: 14px solid rgba(66, 133, 244, 0.6);
   transform-origin: bottom center;
-  transform: translateX(-50%) translateY(-100%); /* Di depan dot */
+  transform: translateX(-50%) translateY(-100%);
   z-index: 1;
   transition: transform 0.2s ease-out;
 }
-
 @keyframes pulse-user {
   0% {
     transform: scale(1);

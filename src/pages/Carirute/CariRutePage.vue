@@ -5,6 +5,8 @@ import { ref, onMounted, onUnmounted } from "vue";
 import ButtonPrimary from "../../components/ButtonPrimary.vue";
 import { useRouter } from "vue-router";
 import { getRekomendasiAngkot } from "../../services/angkotService";
+// --- TAMBAHAN IMPORT ---
+import ErrorState from "../../components/ErrorState.vue";
 
 // ================================
 // STATE & CONFIG
@@ -28,6 +30,14 @@ const suggestions = ref([]);
 const isSearching = ref(false);
 const isLocating = ref(false);
 
+// --- TAMBAHAN STATE ERROR ---
+const errorConfig = ref({
+  show: false,
+  title: "",
+  message: "",
+  icon: "",
+});
+
 const CIANJUR_BBOX = "106.83,-7.55,107.45,-6.71";
 
 const debounce = (fn, delay) => {
@@ -39,11 +49,40 @@ const debounce = (fn, delay) => {
 };
 
 // ================================
+// LOGIKA ERROR HANDLING
+// ================================
+
+const handleError = (error) => {
+  errorConfig.value.show = true;
+
+  if (error.status === 404) {
+    errorConfig.value.title = "Rute Tidak Ditemukan";
+    errorConfig.value.message =
+      "Maaf, saat ini belum ada jalur angkot yang menghubungkan kedua lokasi tersebut.";
+    errorConfig.value.icon = "mdi:map-marker-off";
+  } else if (error.status === 504 || error.message?.includes("timeout")) {
+    errorConfig.value.title = "Koneksi Terputus";
+    errorConfig.value.message =
+      "Permintaan terlalu lama. Pastikan koneksi internetmu stabil dan coba lagi.";
+    errorConfig.value.icon = "mdi:wifi-off";
+  } else if (error.status === 500) {
+    errorConfig.value.title = "Gangguan Server";
+    errorConfig.value.message =
+      "Kami sedang mengalami masalah teknis. Silakan coba beberapa saat lagi.";
+    errorConfig.value.icon = "mdi:server-network-off";
+  } else {
+    errorConfig.value.title = "Gagal Mencari Rute";
+    errorConfig.value.message =
+      "Terjadi kesalahan sistem. Pastikan lokasi yang dipilih sudah benar.";
+    errorConfig.value.icon = "mdi:alert-circle-outline";
+  }
+};
+
+// ================================
 // LOGIKA "PILIH LEWAT MAPS"
 // ================================
 
 const openMapPicker = () => {
-  // Jika user tidak sedang fokus ke input tertentu, default ke 'start'
   const mode = activeField.value || "start";
   router.push({
     path: "/pilih-lokasi",
@@ -65,7 +104,6 @@ const checkReturnedLocation = () => {
         endCoords.value = data.coords;
         endError.value = "";
       }
-      // Hapus agar tidak terpicu lagi saat refresh
       localStorage.removeItem("selected_map_location");
     } catch (e) {
       console.error("Error parsing location data", e);
@@ -193,6 +231,7 @@ const goToMap = async () => {
   try {
     const [startLng, startLat] = startCoords.value;
     const [endLng, endLat] = endCoords.value;
+
     const response = await getRekomendasiAngkot(
       startLat,
       startLng,
@@ -200,10 +239,16 @@ const goToMap = async () => {
       endLng
     );
 
+    // Cek jika status API bukan success (Custom error dari backend)
+    if (response.data.status !== "success") {
+      throw { status: 404 };
+    }
+
     localStorage.setItem(
       CACHE_KEY,
       JSON.stringify({ timestamp: Date.now(), data: response.data })
     );
+
     router.push({
       path: "/jalurmaps",
       query: {
@@ -214,19 +259,16 @@ const goToMap = async () => {
       },
     });
   } catch (err) {
-    alert("Gagal memuat rute");
+    // Memanggil helper Error Handling
+    handleError(err);
   } finally {
     isLoading.value = false;
   }
 };
 
 onMounted(() => {
-  // Cek apakah ada lokasi yang terpilih dari halaman peta
   checkReturnedLocation();
-
-  // Event listener jika user pindah tab lalu balik lagi
   window.addEventListener("focus", checkReturnedLocation);
-
   const izin = confirm("Aktifkan lokasi untuk mendeteksi lokasi anda?");
   if (izin) getMyLocation(false);
 });
@@ -362,10 +404,23 @@ onUnmounted(() => {
         </p>
       </div>
     </Transition>
+
+    <ErrorState
+      :show="errorConfig.show"
+      :title="errorConfig.title"
+      :message="errorConfig.message"
+      :icon="errorConfig.icon"
+      @retry="
+        errorConfig.show = false;
+        goToMap();
+      "
+      @close="errorConfig.show = false"
+    />
   </div>
 </template>
 
 <style scoped>
+/* ... style tetap sama ... */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -373,7 +428,6 @@ onUnmounted(() => {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.4s ease;
@@ -382,7 +436,6 @@ onUnmounted(() => {
 .fade-leave-to {
   opacity: 0;
 }
-
 @keyframes spin {
   from {
     transform: rotate(0deg);
