@@ -21,6 +21,21 @@ const handleClick = (path) => {
   }, 200);
 };
 
+const goToLandingPage = () => {
+  const landingUrl = import.meta.env.VITE_LANDING_APP_URL;
+
+  isClosing.value = true;
+  setTimeout(() => {
+    isOpen.value = false;
+    isClosing.value = false;
+
+    if (landingUrl) {
+      window.location.href = landingUrl;
+    } else {
+      console.warn("URL Tidak ditemukan");
+    }
+  }, 200);
+};
 const isActive = (path) => route.path === path;
 </script>
 
@@ -80,12 +95,8 @@ const isActive = (path) => route.path === path;
       >
         <!-- HOME -->
         <button
-          @click="handleClick('/home')"
-          :class="[
-            isActive('/home')
-              ? 'bg-[#72BD43] text-white shadow-md w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins'
-              : 'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins',
-          ]"
+          @click="goToLandingPage"
+          :class="'text-gray-800 hover:bg-[#72BD43] hover:text-white w-33 text-center font-semibold text-base rounded-full mt-1 font-poppins'"
         >
           HOME
         </button>
